@@ -1,0 +1,66 @@
+
+
+table {
+	width : 100%;
+	margin: auto;
+	border: 2px solid aliceblue;
+	padding: 0.1em;
+}
+
+tr :hover {
+	background-color: aquamarine;
+}
+
+td {
+	cursor: pointer;
+}
+
+.local_play_now {
+	width: 1em;
+}
+
+body {
+	margin: auto;
+	width:100%;
+	background-color: : orange;
+	box-sizing: border-box;
+
+}
+
+#player_bar {
+	position: fixed;
+	width: 100%;
+	box-sizing: border-box;
+  margin: 0px;
+	background-color: lightgreen;
+
+}
+
+#player_list {
+	font-family: 'Roboto Condensed', sans-serif;
+	padding-top: 6em;
+	background-color: lightblue;
+	width:100%;
+	margin:auto;
+	box-sizing: border-box;
+
+}
+
+audio {
+	width: 100%;
+		box-sizing:border-box;
+  margin: auto;
+
+}
+
+.currently_playing {
+	color: white;
+	background-color: black;
+}
+
+input#search_input {
+	width: 100%;
+	box-sizing:border-box;
+  margin: auto;
+
+}
