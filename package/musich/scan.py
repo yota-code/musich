@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import os
 
 from cc_pathlib import Path
 
@@ -11,7 +12,10 @@ def recurse_dir(parent) :
 		if pth.is_file() :
 			yield pth
 		elif pth.is_dir() :
-			yield from recurse_dir(pth)
+			try :
+				yield from recurse_dir(pth)
+			except PermissionError :
+				pass
 		else :
 			print(pth)
 
@@ -57,35 +61,40 @@ tag_integer_set = {
 	"totaldiscs", "totaltracks", "tracknumber", "tracktotal", "originalyear", "yearrel", "discnumber", "disctotal"
 }
 
+t_col, t_row = os.get_terminal_size(0)
+
 class MusicDatabase() :
 
-	def __init__(self, root_dir) :
+	def __init__(self, catalog_dir) :
 
-		self.root_dir = root_dir.resolve()
+		self.catalog_dir = catalog_dir.resolve()
 		self.database = dict()
 
-		if not Path("database.pickle").is_file() :
+		if not (self.catalog_dir / "database.pickle").is_file() :
 			self.first_scan()
 
-		if not Path("database.json").is_file() :
+		if not (self.catalog_dir / "database.json").is_file() :
 			self.second_scan()
 
-		if not Path("database.tsv").is_file() :
+		if not (self.catalog_dir / "database.tsv").is_file() :
 			self.third_pass()
-
+			
 	def first_scan(self) :
 		scan_map = dict()
-		for n, pth in enumerate(recurse_dir(self.root_dir)) :
+		print(f'\x1b[K\x1b[Afirst_scan() :: in progress ...')
+		for n, pth in enumerate(recurse_dir(self.catalog_dir)) :
 			if pth.suffix.lower() in ['.mp3', '.flac', '.ogg'] :
-				rel = pth.relative_to(self.root_dir)
+				print(f'\x1b[A\x1b[Kfirst_scan: {pth.relative_to(self.catalog_dir)}'[:t_col - 4])
+				rel = pth.relative_to(self.catalog_dir)
 				tmp_map = dict()
 				for k, v in mutagen.File(pth).items() :
 					tmp_map[k] = v
 				scan_map[str(rel)] = tmp_map
-		Path("database.pickle").save(scan_map)
+		(self.catalog_dir /"database.pickle").save(scan_map)
+		print(f'\x1b[K\x1b[Afirst_scan() :: DONE')
 
 	def second_scan(self) :
-		scan_map = Path("database.pickle").load()
+		scan_map = (self.catalog_dir / "database.pickle").load()
 		data_map = dict()
 		for k in sorted(scan_map) :
 			tmp_map = dict()
@@ -120,10 +129,10 @@ class MusicDatabase() :
 
 			data_map[k] = tmp_map
 
-		Path('./database.json').save(data_map, filter_opt={"verbose":True})
+		(self.catalog_dir / './database.json').save(data_map, filter_opt={"verbose":True})
 
 	def third_pass(self) :
-		data_map = Path("database.json").load()
+		data_map = (self.catalog_dir / "database.json").load()
 
 		for pth in data_map :
 			for tag_before in tag_rename_map :
@@ -166,20 +175,20 @@ class MusicDatabase() :
 				if tag in data_map[pth] :
 					data_map[pth][tag] = int(data_map[pth][tag])
 
-		Path('./database_renamed.json').save(data_map, filter_opt={"verbose":True})
+		(self.catalog_dir / 'database_renamed.json').save(data_map, filter_opt={"verbose":True})
 
 		stack = list()
 		for p in sorted(data_map) :
 			line = [p,] + [f"{k}={v}" for k, v in data_map[p].items()]
 			stack.append(line)
 
-		Path('./database.tsv').save(stack)
-		Path('./database.json.br').save(data_map)
+		(self.catalog_dir / 'database.tsv').save(stack)
+		(self.catalog_dir / 'database.json.br').save(data_map)
 
 	def scan(self) :
-		for n, pth in enumerate(recurse_dir(self.root_dir)) :
+		for n, pth in enumerate(recurse_dir(self.catalog_dir)) :
 			if pth.suffix.lower() in ['.mp3', '.flac', '.ogg'] :
-				rel = pth.relative_to(self.root_dir)
+				rel = pth.relative_to(self.catalog_dir)
 				try :
 					m = mutagen.File(pth)
 					stack = list()
@@ -207,7 +216,7 @@ class MusicDatabase() :
 
 		print("---", pth.resolve())
 
-		db = Path("database.json.br").load()
+		db = (self.catalog_dir / "database.json.br").load()
 
 		stack = list()
 		for n, k in enumerate(sorted(db)) :

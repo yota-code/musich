@@ -1,0 +1,5 @@
+#!/usr/bin/env zsh
+
+screen -dmS musich
+screen -S musich -X stuff "source export_path"
+screen -S musich -X stuff "_musich-serve && exit"
