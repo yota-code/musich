@@ -39,6 +39,8 @@ tag_rename_map = {
 	'TXXX:BARCODE' : 'barcode',
 	'TXXX:ASIN' : 'asin',
 	'TXXX:CATALOGNUMBER' : 'catalognumber',
+	'TXXX:ARTISTS' : 'artists',
+	'TENC' : 'encoder',
 	'TIT2' : 'title',
 	'TSO2' : 'albumartistsort',
 	'TSOP' : 'artistsort',
@@ -48,17 +50,21 @@ tag_rename_map = {
 	'TCON' : 'genre',
 	'TDRC' : 'originaldate',
 	'TDOR' : 'yearrel',
-	'COMM::sve' : 'comment',
 	'TPE1' : 'artist',
 	'TPE2' : 'performer',
 	'TMED' : 'media',
-	'USLT::eng' : 'lyrics::eng',
+	'USLT::eng' : 'lyrics',
 	'TPUB' : 'organization',
 	'TLAN' : 'language',
+	'TCOM' : 'composer',
+	'TIPL' : 'people',
+	'TLEN' : 'length'
 }
 
+tag_delete_lst = ["barcode", "catalognumber", "asin", "isrc", "encoder", "encoder_options", "encoder_version", "engineer", "script", "media", "accurateripdiscid", "acoustid_id", "length"]
+
 tag_integer_set = {
-	"totaldiscs", "totaltracks", "tracknumber", "tracktotal", "originalyear", "yearrel", "discnumber", "disctotal"
+	"totaldiscs", "totaltracks", "tracknumber", "tracktotal", "originalyear", "yearrel", "discnumber", "disctotal", "length"
 }
 
 t_col, t_row = os.get_terminal_size(0)
@@ -70,31 +76,35 @@ class MusicDatabase() :
 		self.catalog_dir = catalog_dir.resolve()
 		self.database = dict()
 
-		if not (self.catalog_dir / "database.pickle").is_file() :
-			self.first_scan()
+		self.first_pass_db = self.catalog_dir / ".database/pass_1.pickle"
+		self.second_pass_db = self.catalog_dir / ".database/pass_2.json"
+		self.third_pass_db = self.catalog_dir / ".database/pass_3.json"
 
-		if not (self.catalog_dir / "database.json").is_file() :
-			self.second_scan()
+		if not self.first_pass_db.is_file() :
+			self.first_pass()
 
-		if not (self.catalog_dir / "database.tsv").is_file() :
+		if not self.second_pass_db.is_file() :
+			self.second_pass()
+
+		if not self.third_pass_db.is_file() :
 			self.third_pass()
 			
-	def first_scan(self) :
+	def first_pass(self) :
 		scan_map = dict()
-		print(f'\x1b[K\x1b[Afirst_scan() :: in progress ...')
+		print(f'\x1b[K\x1b[Afirst_pass() :: in progress ...')
 		for n, pth in enumerate(recurse_dir(self.catalog_dir)) :
 			if pth.suffix.lower() in ['.mp3', '.flac', '.ogg'] :
-				print(f'\x1b[A\x1b[Kfirst_scan: {pth.relative_to(self.catalog_dir)}'[:t_col - 4])
+				print(f'\x1b[A\x1b[Kfirst_pass: {pth.relative_to(self.catalog_dir)}'[:t_col - 4])
 				rel = pth.relative_to(self.catalog_dir)
 				tmp_map = dict()
 				for k, v in mutagen.File(pth).items() :
 					tmp_map[k] = v
 				scan_map[str(rel)] = tmp_map
-		(self.catalog_dir /"database.pickle").save(scan_map)
-		print(f'\x1b[K\x1b[Afirst_scan() :: DONE')
+		self.first_pass_db.save(scan_map)
+		print(f'\x1b[K\x1b[Afirst_pass() :: DONE')
 
-	def second_scan(self) :
-		scan_map = (self.catalog_dir / "database.pickle").load()
+	def second_pass(self) :
+		scan_map = self.first_pass_db.load()
 		data_map = dict()
 		for k in sorted(scan_map) :
 			tmp_map = dict()
@@ -129,10 +139,10 @@ class MusicDatabase() :
 
 			data_map[k] = tmp_map
 
-		(self.catalog_dir / './database.json').save(data_map, filter_opt={"verbose":True})
+		self.second_pass_db.save(data_map, filter_opt={"verbose":True})
 
 	def third_pass(self) :
-		data_map = (self.catalog_dir / "database.json").load()
+		data_map = self.second_pass_db.load()
 
 		for pth in data_map :
 			for tag_before in tag_rename_map :
@@ -147,6 +157,12 @@ class MusicDatabase() :
 					else :
 						data_map[pth][tag_after] = data_map[pth][tag_before]
 						del data_map[pth][tag_before]
+
+			for tag in list(data_map[pth]) :
+				# remove comments (often contains crap)
+				if tag.startswith('COMM:') or tag == 'Comment' :
+					del data_map[pth][tag]
+
 			if 'TRCK' in data_map[pth] :
 				tracknumber, tracktotal = None, None
 				if '/' in data_map[pth]['TRCK'] :
@@ -175,61 +191,66 @@ class MusicDatabase() :
 				if tag in data_map[pth] :
 					data_map[pth][tag] = int(data_map[pth][tag])
 
-		(self.catalog_dir / 'database_renamed.json').save(data_map, filter_opt={"verbose":True})
+		self.third_pass_db.save(data_map, filter_opt={"verbose":True})
+		(self.catalog_dir / '.database/meta.json.br').save(data_map)
+
+		for pth in data_map :
+			for tag in list(data_map[pth]) :
+				if tag.startswith("musicbrainz_") or tag in tag_delete_lst :
+					del data_map[pth][tag]
 
 		stack = list()
 		for p in sorted(data_map) :
 			line = [p,] + [f"{k}={v}" for k, v in data_map[p].items()]
 			stack.append(line)
 
-		(self.catalog_dir / 'database.tsv').save(stack)
-		(self.catalog_dir / 'database.json.br').save(data_map)
+		(self.catalog_dir / '.database/list.tsv.br').save(stack)
 
-	def scan(self) :
-		for n, pth in enumerate(recurse_dir(self.catalog_dir)) :
-			if pth.suffix.lower() in ['.mp3', '.flac', '.ogg'] :
-				rel = pth.relative_to(self.catalog_dir)
-				try :
-					m = mutagen.File(pth)
-					stack = list()
-					for k in m :
-						if isinstance(m[k], mutagen.id3.MCDI) :
-							continue
-						if ( isinstance(m[k], list) ) :
-							v = ';'.join(m[k])
-						else :
-							if hasattr(m[k], 'mime') and m[k].mime == "image/jpeg" :
-								continue
-							v = m[k]
-						stack.append([k, v])
-						if isinstance(v, bytes) :
-							print(pth, k)
-							sys.exit(0)
+	# def scan(self) :
+	# 	for n, pth in enumerate(recurse_dir(self.catalog_dir)) :
+	# 		if pth.suffix.lower() in ['.mp3', '.flac', '.ogg'] :
+	# 			rel = pth.relative_to(self.catalog_dir)
+	# 			try :
+	# 				m = mutagen.File(pth)
+	# 				stack = list()
+	# 				for k in m :
+	# 					if isinstance(m[k], mutagen.id3.MCDI) :
+	# 						continue
+	# 					if ( isinstance(m[k], list) ) :
+	# 						v = ';'.join(m[k])
+	# 					else :
+	# 						if hasattr(m[k], 'mime') and m[k].mime == "image/jpeg" :
+	# 							continue
+	# 						v = m[k]
+	# 					stack.append([k, v])
+	# 					if isinstance(v, bytes) :
+	# 						print(pth, k)
+	# 						sys.exit(0)
 
-					stack = sorted(stack)
-					self.database[str(rel)] = '\t'.join(f"{k}:{v}" for k, v in stack)
-					# print("{0}\t{1}".format(n, rel))
-				except mutagen.mp3.HeaderNotFoundError :
-					print("{0}\t{1}".format(n, rel), file=sys.stderr)
+	# 				stack = sorted(stack)
+	# 				self.database[str(rel)] = '\t'.join(f"{k}:{v}" for k, v in stack)
+	# 				# print("{0}\t{1}".format(n, rel))
+	# 			except mutagen.mp3.HeaderNotFoundError :
+	# 				print("{0}\t{1}".format(n, rel), file=sys.stderr)
 
-	def save(self, pth) :
+	# def save(self, pth) :
 
-		print("---", pth.resolve())
+	# 	print("---", pth.resolve())
 
-		db = (self.catalog_dir / "database.json.br").load()
+	# 	db = (self.catalog_dir / "database.json.br").load()
 
-		stack = list()
-		for n, k in enumerate(sorted(db)) :
-			stack.append(f'{k}\t{db[k]}')
+	# 	stack = list()
+	# 	for n, k in enumerate(sorted(db)) :
+	# 		stack.append(f'{k}\t{db[k]}')
 
-		pth.write_text('\n'.join(stack))
+	# 	pth.write_text('\n'.join(stack))
 
 if __name__ == '__main__' :
-	music_library = Path("/media/yoochan/front/music/library")
+	catalog_dir = Path(os.environ["MUSICH_catalog_DIR"])
 	# music_library = Path("/media/yoochan/front/music/library/__library_old__/Alanis Morrisette/Feat On Scraps/")
 
-	u = MusicDatabase(music_library)
-	u.save(Path('./data/__local__.tsv'))
+	u = MusicDatabase(catalog_dir)
+	# u.save(Path('./data/__local__.tsv'))
 
 	# txt = Path('./database.txt').read_text()
 	# print(txt)

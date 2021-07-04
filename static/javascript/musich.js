@@ -13,7 +13,7 @@ class MusichHandler {
 		this.tracklist = this.audio.audioTracks;
 
 		this.database = new Map();
-		http_req("GET", "/get_data").then((obj) => {
+		http_req("GET", "/get_list").then((obj) => {
 			for (let line of obj.split('\n')) {
 				var [key, val] = line.split('\t', 2);
 				this.database.set(

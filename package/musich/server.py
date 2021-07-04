@@ -9,10 +9,12 @@ from cc_pathlib import Path
 import musich.scan
 
 musich_root_dir = Path(os.environ["MUSICH_root_DIR"])
+musich_catalog_dir = Path(os.environ["MUSICH_catalog_DIR"])
+musich_static_dir = Path(os.environ["MUSICH_static_DIR"])
 
 class MusishServer():
 
-	catalog_pth = musich_root_dir / 'catalog' / 'database.tsv'
+	catalog_pth = musich_catalog_dir / ".database/list.tsv.br"
 
 	def __init__(self) :
 	
@@ -22,7 +24,7 @@ class MusishServer():
 	@cherrypy.expose
 	def get_track(self, * pos, ** nam) :
 		if 'u' in nam :
-			pth = musich_root_dir / "catalog" / nam['u']
+			pth = musich_catalog_dir / nam['u']
 			if not pth.is_file() :
 				print(f"file not found : {pth}")
 				raise cherrypy.HTTPError(404)
@@ -34,10 +36,10 @@ class MusishServer():
 
 	@cherrypy.expose
 	def index(self, * pos, ** nam) :
-		return (musich_root_dir / "static/html/index.html").read_bytes()
+		return (musich_static_dir / "html/index.html").read_bytes()
 
 	@cherrypy.expose
-	def get_data(self, * pos, ** nam) :
+	def get_list(self, * pos, ** nam) :
 		return self.catalog_pth.read_bytes()
 
 

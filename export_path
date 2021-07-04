@@ -1,10 +1,9 @@
 
-source /mnt/reinstall/root/arm-linux-gnueabihf.202009/export_path
-
 export MUSICH_root_DIR=${0:a:h}
+export MUSICH_catalog_DIR=${MUSICH_root_DIR}/catalog
+export MUSICH_static_DIR=${MUSICH_root_DIR}/static
 
 export PATH=${MUSICH_root_DIR}/script:$PATH
 export PYTHONPATH=${MUSICH_root_DIR}/package:$PYTHONPATH
 
 rehash
-

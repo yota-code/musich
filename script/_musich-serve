@@ -11,7 +11,7 @@ import musich.server
 musich_root_dir = Path(os.environ["MUSICH_root_DIR"])
 
 cherrypy.config.update({
-	'server.socket_host': '192.168.1.105',
+	'server.socket_host': 'raspberrypi.local',
 	'server.socket_port': 45080,
 }) # global config
 	
@@ -24,7 +24,6 @@ musich_config = {
 		'tools.staticdir.dir': "static",
 	}
 }
-
 
 cherrypy.tree.mount(musich.server.MusishServer(), '/', config=musich_config)
 
