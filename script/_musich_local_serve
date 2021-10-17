@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+
+import os
+
+import cherrypy
+
+from cc_pathlib import Path
+
+import musich.local
+import musich.catalog
+
+musich_dir = Path(os.environ["MUSICH_root_DIR"])
+
+cherrypy.config.update({
+	'server.socket_host': '127.0.0.1',
+	'server.socket_port': 45081,
+}) # global config
+	
+musich_config = {
+	'/': {
+		'tools.staticdir.root': str(musich_dir),
+	},
+	'/_static' : {
+		'tools.staticdir.on': True,
+		'tools.staticdir.dir': "static",
+	}
+}
+
+musich_catalog = musich.catalog.MusichCatalog(musich_dir / "catalog")
+
+cherrypy.tree.mount(musich.local.MusichLocal(musich_dir / "static", musich_catalog), '/', config=musich_config)
+
+cherrypy.engine.start()
+cherrypy.engine.block()

@@ -3,6 +3,8 @@ export MUSICH_root_DIR=${0:a:h}
 export MUSICH_catalog_DIR=${MUSICH_root_DIR}/catalog
 export MUSICH_static_DIR=${MUSICH_root_DIR}/static
 
+source ${MUSICH_root_DIR}/py3env/bin/activate
+
 export PATH=${MUSICH_root_DIR}/script:$PATH
 export PYTHONPATH=${MUSICH_root_DIR}/package:$PYTHONPATH
 

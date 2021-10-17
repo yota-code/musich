@@ -12,3 +12,6 @@ dans la file d'attente
 - down button: move the title down in the queue
 - delete button: remove the title from the queue
 - play now
+
+
+https://stackoverflow.com/questions/35927900/how-to-setup-cherrypy-server-sent-events/53682027#53682027
