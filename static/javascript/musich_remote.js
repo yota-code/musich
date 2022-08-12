@@ -1,6 +1,6 @@
 
 
-class MusichHandler {
+class MusichRemote {
 
 	constructor() {
 

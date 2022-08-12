@@ -1,10 +1,14 @@
-
+/*
+	this.sse = new EventSource(`/_get_status?last_timestamp=${this.last_timestamp}`);
+	this.sse.onmessage = ((evt) => {
+		var obj = JSON.parse(evt.data);
+		this.request_status(obj);
+	});
+*/
 
 class MusichLocal {
 
 	constructor() {
-
-
 		this.m_cur = null;
 		this.last_timestamp = 0;
 
@@ -14,25 +18,15 @@ class MusichLocal {
 		this.load_cat();
 
 		this.m_que = new Array();
-		//this.load_que();
-
 		this.m_hst = new Array();
-		//this.load_hst();
 
 		this.is_playing = false;
 
 		this.refresh = setInterval(() => {
-			this.update_status();
-		}, 3000);
+			this.request_status();
+		}, 30000);
 
-		this.update_status();
-
-
-		// this.sse = new EventSource(`/_get_status?last_timestamp=${this.last_timestamp}`);
-		// this.sse.onmessage = ((evt) => {
-		// 	var obj = JSON.parse(evt.data);
-		// 	this.update_status(obj);
-		// });
+		this.request_status();
 
 		document.addEventListener("keyup", (evt) => {
 			// evt.preventDefault();
@@ -86,17 +80,6 @@ class MusichLocal {
 		}
 	}
 
-	// load_que() {
-	// 	console.log("MusichLocal.load_que()");
-	// 	get_json("/_load_que").then((obj) => {
-	// 		if (obj) {
-	// 			this.m_que = new Array();
-	// 			this.m_que = obj;
-	// 			this.disp_que();
-	// 		}
-	// 	});
-	// }
-
 	disp_que() {
 		console.log("MusichLocal.disp_que()");
 		var h_ul = document.getElementById("queue_lst");
@@ -106,17 +89,6 @@ class MusichLocal {
 		}
 	}
 
-	// load_hst() {
-	// 	console.log("MusichLocal.load_hst()");
-	// 	get_json("/_load_hst").then((obj) => {
-	// 		if (obj) {
-	// 			this.m_hst = new Array();
-	// 			this.m_hst = obj;
-	// 			this.disp_hst();
-	// 		}
-	// 	});
-	// }
-
 	disp_hst(len) {
 		console.log(`MusichLocal.disp_hst(${len})`);
 		var h_ul = document.getElementById("history_lst");
@@ -125,35 +97,49 @@ class MusichLocal {
 		}
 	}
 
-	update_status() {
-		console.log("this.is_playing", this.is_playing);
-
+	request_status() {
 		get_json(`/_get_status?last_timestamp=${this.last_timestamp}`).then((obj) => {
-			var h_span = document.getElementById("play_track_pth");
-
-			if ( obj.hasOwnProperty("cur") ) {
-				h_span.innerText = ( obj["cur"] === null ) ? "♫ musich ♫" : obj["cur"];
-			}
-			if ( obj.hasOwnProperty("que") ) {
-				if ( obj["que"].length ) {
-					this.m_que = obj["que"];
-					this.disp_que();
-				}
-			}
-			if ( obj.hasOwnProperty("hst") ) {
-				if ( obj["hst"].length ) {
-					this.m_hst = this.m_hst.concat(obj["hst"]);
-					this.disp_hst(obj["hst"].length);
-				}
-			}
-			if ( obj.hasOwnProperty("_last_") ) {
-				this.last_timestamp = obj["_last_"];
-			}
-			if ( obj.hasOwnProperty("_play_") ) {
-				this.update__play_(obj['_play_']);
-			}
+			this.update_status(obj);
 		});
+	}
 
+	update_status(obj) {
+		console.log(`MusichLocal.update_status(${JSON.stringify(obj)})`);
+		var h_span = document.getElementById("play_track_pth");
+
+		if ( obj.hasOwnProperty("cur") ) {
+			h_span.innerText = ( obj["cur"] === null ) ? "♫ musich ♫" : obj["cur"];
+		}
+		if ( obj.hasOwnProperty("que") ) {
+			if ( obj["que"].length ) {
+				this.m_que = obj["que"];
+				this.disp_que();
+			}
+		}
+		if ( obj.hasOwnProperty("hst") ) {
+			if ( obj["hst"].length ) {
+				this.m_hst = this.m_hst.concat(obj["hst"]);
+				this.disp_hst(obj["hst"].length);
+			}
+		}
+		if ( obj.hasOwnProperty("_last_") ) {
+			this.last_timestamp = obj["_last_"];
+		}
+		if ( obj.hasOwnProperty("_play_") ) {
+			this.is_playing = obj['_play_'];
+		}
+
+		if ( obj.hasOwnProperty("_pos_") ) {
+			var [position, duration] = obj['_pos_'];
+			var h_input = document.getElementById("play_range_input");
+			h_input.value = 100.0 * position / duration;
+		}
+
+
+		var h_input = document.getElementById("play_pause_input");
+
+		h_input.value = (this.is_playing) ? "⏸️" : "▶️";
+		h_input.disabled = false;
 	}
 
 
@@ -195,14 +181,6 @@ class MusichLocal {
 		});
 	}
 
-	update__play_(obj) {
-		var h_input = document.getElementById("play_pause_input");
-		this.is_playing = obj;
-
-		h_input.value = (this.is_playing) ? "⏸️" : "▶️";
-		h_input.disabled = false;
-	}
-
 	play_pause() {
 		console.log("MusichLocal.play_pause()");
 
@@ -214,9 +192,14 @@ class MusichLocal {
 		h_input.disabled = true;
 
 		get_json("/play_pause").then((obj) => {
-			if ( obj.hasOwnProperty("_play_") ) {
-				this.update__play_(obj['_play_']);
-			}
+			this.update_status(obj);
+		});
+	}
+
+	play_next() {
+		console.log("MusichLocal.play_next()");
+		get_json("/play_next").then((obj) => {
+			this.update_status(obj);
 		});
 	}
 
@@ -253,9 +236,7 @@ class MusichLocal {
 			var when = ["now", "next", "after"][col];
 			http_req("POST", "./update_queue", {"Content-Type": "application/json"}, JSON.stringify([when, what])).then((obj) => {
 				console.log(obj);
-
-
-
+				this.update_status(obj);
 			})
 
 			return;

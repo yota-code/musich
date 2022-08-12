@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+
+from cc_pathlib import Path
+
+from musich.catalog import MusichCatalog
+
+catalog_dir = Path(os.environ["MUSICH_catalog_DIR"]).resolve()
+
+u = MusichCatalog(catalog_dir)
+
+do_everything = True
+for arg in sys.argv[1:] :
+	pth = Path(os.path.abspath(arg))
+	try :
+		pth.relative_to(catalog_dir)
+		u.refresh(parent_dir=pth)
+		do_everything = False
+	except ValueError :
+		pass
+
+if do_everything :
+	u.refresh()
+
+
+# k_lst = [
+# 	[key,] + [f"{k}={v}" for k, v in u.c_map[key].items()] for key in sorted(u.c_map)
+# ]
+
+# (u.index_pth.parent / u.index_pth.fname).with_suffix('.tsv').save(k_lst)
+# (u.index_pth.parent / u.index_pth.fname).with_suffix('.tsv.br').save(k_lst)
+# (u.index_pth.parent / u.index_pth.fname).with_suffix('.json').save(u.c_map)

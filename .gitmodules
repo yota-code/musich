@@ -1,0 +1,3 @@
+[submodule "ext/requiescat"]
+	path = ext/requiescat
+	url = https://github.com/yota-code/requiescat.git
