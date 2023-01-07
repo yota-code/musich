@@ -5,6 +5,7 @@ import datetime
 import hashlib
 import json
 import os
+from re import T
 import sqlite3
 import sys
 
@@ -55,7 +56,7 @@ tag_rename_map = {
 
 tag_delete_set = {
 	"barcode", "catalognumber", "asin", "isrc", "encoder", "encoder_options", "encoder_version", "wmfsdkneeded", "wmfsdkversion",
-	"engineer", "script", "media", "accurateripdiscid", "length", "rating", "rating"
+	"engineer", "script", "media", "accurateripdiscid", "length", "rating", "rating", "notes"
 }
 
 tag_integer_set = {
@@ -86,7 +87,12 @@ class MusichCatalog() :
 
 	"""
 		meta.json : hash -> all meta content, sent to the client
-		file.json : hash -> (path, mtime) not known by the client
+		file.json : hash -> (key, mtime, msize) not known by the client
+
+		in c_dir, the first level directory must contains not information about the music
+		c_dir / key is always a music file
+
+		hash_map : key -> (path, mtime)
 	"""
 
 	mime = {
@@ -98,34 +104,34 @@ class MusichCatalog() :
 	}
 
 	def __init__(self, catalog_dir) :
-
+		
 		self.e_lst = list( self.mime )
 		self.c_dir = catalog_dir.resolve()
 
 		self.meta_pth = (self.c_dir / ".database" / "meta.json")
 		self.file_pth = (self.c_dir / ".database" / "file.json")
+		self.search_pth = (self.c_dir / ".database" / "search.json")
 
 		self._load()
 
 	def _load(self) :
 		self.meta_map = self.meta_pth.load() if self.meta_pth.is_file() else dict()
 		self.file_map = self.file_pth.load() if self.file_pth.is_file() else dict()
+		self.search_map = self.search_pth.load() if self.search_pth.is_file() else dict()
 
-		self.hash_map = { v[0] : k for k, v in self.file_map.items() }
+		self.hash_map = { v[0] : (k, v[1]) for k, v in self.file_map.items() }
 
 	def _save(self) :
 		self.meta_pth.save(self.meta_map)
 		self.file_pth.save(self.file_map)
+		self.search_pth.save(self.search_map)
 		
 		self.meta_pth.with_suffix('.json.br').save(self.meta_map)
 		self.file_pth.with_suffix('.json.br').save(self.file_map)
+		self.search_pth.with_suffix('.json.br').save(self.search_map)
 
 	def key_to_part(self, key) :
-		if (self.c_dir / Path(key).parts[0]).is_symlink() :
-			p = Path(Path(key).with_suffix('')).parts[1:]
-		else :
-			p = Path(Path(key).with_suffix('')).parts
-		return '/'.join(p)
+		return Path(key).with_suffix('').parts[1:]
 
 	def key_to_path(self, key) :
 		return self.c_dir / key
@@ -134,42 +140,47 @@ class MusichCatalog() :
 		bin = self.key_to_path(key).read_bytes()
 		hsh = hashlib.blake2b(bin, salt=b"#musich", digest_size=24).digest()
 		b64 = base64.urlsafe_b64encode(hsh).decode('ascii')
-		return f'{b64}.{len(bin):x}'
+		return f'{b64}.{len(bin):X}'
 
 	def key_to_time(self, key) :
-		mtm = int(self.key_to_path(key).stat().st_mtime)
-		return mtm
+		return int(self.key_to_path(key).stat().st_mtime)
+
+	def key_to_size(self, key) :
+		return int(self.key_to_path(key).stat().st_size)
+
+	def hsh_to_search(self, hsh) :
+
+		s_lst = [' '.join(self.meta_map[hsh]["/"]),]
+		for k in self.meta_map[hsh] :
+			if k == "/" :
+				continue
+			m = str(self.meta_map[hsh][k])
+			for s in s_lst[:] :
+				if m in s :
+					break
+			else :
+				s_lst.append(m)
+		return s_lst[0] + '\t' + ' '.join(s_lst[1:])
 
 	def key_to_meta(self, key) :
 		pth = self.key_to_path(key)
 
-		tag_0_map = dict(mutagen.File(pth))
-
+		tag_lst = list()
 		try :
-			tag_1_map = self.pass_1(tag_0_map)
+			tag_lst.append( dict(mutagen.File(pth)) )
+			pass_lst = [
+				getattr(self, n)
+				for n in sorted(m for m in dir(self) if m.startswith('pass_'))
+			]
+			for func in pass_lst :
+				tag_lst.append(func(tag_lst[-1]))
 		except :
-			print(tag_0_map)
+			print(tag_lst)
 			raise
+		
+		tag_lst[-1]['/'] = self.key_to_part(key)
 
-		try :
-			tag_2_map = self.pass_2(tag_1_map)
-		except :
-			print(tag_1_map)
-			raise
-
-		try :
-			tag_3_map = self.pass_3(tag_2_map)
-		except :
-			print(tag_0_map)
-			print(tag_1_map)
-			print(tag_2_map)
-			raise
-
-		tag_4_map = self.pass_4(tag_3_map)
-
-		tag_4_map['/'] = self.key_to_part(key)
-
-		return tag_4_map
+		return tag_lst[-1]
 
 	def pop(self, key) :
 		print(f"- {key}")
@@ -189,8 +200,9 @@ class MusichCatalog() :
 
 		self.file_map[hsh] = [key, mtm]
 		self.meta_map[hsh] = self.key_to_meta(key)
+		self.search_map[hsh] = self.hsh_to_search(hsh)
 
-		self.hash_map[key] = hsh
+		self.hash_map[key] = [hsh, mtm]
 
 		self.tag_set |= self.meta_map[hsh].keys()
 
@@ -225,7 +237,11 @@ class MusichCatalog() :
 		for key in key_set :
 			pth = self.key_to_path(key)
 			if key in self.hash_map :
-				hsh, mtm = self.hash_map[key]
+				try :
+					hsh, mtm = self.hash_map[key]
+				except :
+					print(self.hash_map[key])
+					raise
 				if int(pth.stat().st_mtime) <= mtm :
 					print(f"= {key}")
 					continue
@@ -235,187 +251,6 @@ class MusichCatalog() :
 		self._save()
 
 		Path("tag_lst.txt").write_text('\n'.join(sorted(self.tag_set)))
-		
-
-
-
-
-
-
-
-
-		# self.zero_mtime = self.index_pth.stat().st_mtime
-
-		# self.index_map = self.index_pth.load()
-		
-		# if parent_dir is None :
-		# 	parent_dir = self.c_dir
-
-		# if suffix_lst is None :
-		# 	suffix_lst = self.e_lst
-
-		# file_lst = self.scan(parent_dir, suffix_lst)
-
-		# file_set = set(file_lst)
-
-		# to_del_set = self.index_map.keys() - file_set
-		# for pth in to_del_set :
-		# 	self.pop(pth)
-
-		# to_add_set = file_set - self.index_map.keys()
-		# for key in file_set :
-		# 	if key in to_add_set or self.zero_mtime <= (self.c_dir / key).stat().st_mtime :
-		# 		bin = (self.c_dir / key).read_bytes()
-		# 		hsh = base64.urlsafe_b64encode( hashlib.blake2b(bin, salt=b"#musich", digest_size=24).digest() )
-		# 		if key not in self.index_map or self.index_map[key]['#'] != hsh :
-		# 			self.push(key, hsh)
-
-		# self.index_pth.save(self.index_map)
-
-		# stack = list()
-		# for key in sorted(self.index_map) :
-		# 	ptn = _alnum_filter(key)
-		# 	stack.append([key, self.index_map[key]['#']] + [
-		# 		f"{k}={v}"
-		# 		for k, v in self.index_map[key].items()
-		# 		if k != '#' and _alnum_filter(v) not in ptn
-		# 	])
-
-		# self.index_pth.with_suffix('.tsv').save(sorted(stack))
-
-
-
-
-		# tag_0_map = dict()
-		# for k, v in mutagen.File(self.c_dir / key).items() :
-		# 	tag_0_map[k] = v
-
-		# tag_1_map = self.pass_1(tag_0_map)
-		# tag_2_map = self.pass_2(tag_1_map)
-		# tag_3_map = self.pass_3(tag_2_map)
-		# tag_4_map = self.pass_4(tag_3_map)
-
-		# tag_4_map['#'] = hsh
-
-		# if hsh == "51bf97612c7fb113" :
-		# 	print("== 0 ==", tag_0_map)
-		# 	print("== 1 ==", tag_1_map)
-		# 	print("== 2 ==", tag_2_map)
-		# 	print("== 3 ==", tag_3_map)
-		# 	print("== 4 ==", tag_4_map)
-
-
-		# self.index_map[key] = tag_4_map
-
-		# n = 21
-		# line = key[-t_col+n:].rjust(t_col-n)
-		# print(f"+ \x1b[32m{line}\x1b[0m [\x1b[33m{self.index_map[key]['#']}\x1b[0m]")
-
-
-		# self.hsh_to_str_map[hsh] = '\t'.join(Path(key).parts)
-
-		return
-
-		if self.location_pth.is_file() :
-			for hash, path in self.location_pth.load().items() :
-				old_path_map[path] = hash
-
-		k_set = set()
-
-		for n, pth in enumerate( recurse_dir(self.c_dir) ) :
-			if pth.suffix.lower() in ['.mp3', '.flac', '.ogg', '.wav', 'wma'] :
-				hash = hashlib.blake2b(pth.read_bytes()).hexdigest()[:12]
-
-				key = str( pth.relative_to(self.c_dir) )
-				if key in h_map and h_map[key] == hash :
-					# the file didn't change, we don't process it at all
-					print(f"= \x1b[32m{key}\x1b[0m")
-					continue
-				else :
-					print(f"+ \x1b[31m{key}\x1b[0m")
-
-				k_set.add(key)
-				h_map[key] = hash
-
-				t_map = dict()
-				for k, v in mutagen.File(pth).items() :
-					t_map[k] = v
-				self.c_map[key] = t_map
-
-		return k_set
-
-
-	def update(self) :
-		index_pth = Path(self.c_dir / ".database" / "index.json")
-		u = index_pth.load()
-		for key in u :
-			s = set()
-			for k, v in u[key].items() :
-				if isinstance(v, int) :
-					continue
-				if v in key :
-					continue
-				s.add(v)
-			u[key] = '\t'.join(s)
-		Path(self.c_dir / ".database" / "catalog.json").save(u)
-
-		hash_pth = self.c_dir / ".database" / "hash.txt"
-		if hash_pth.is_file() :
-			print("update skipped")
-			return
-
-		h_map = {p : h for p, h in zip(
-			sorted(self.c_map),
-			[ h.strip() for h in hash_pth.read_text().splitlines() ] if hash_pth.is_file() else list()
-		)}
-
-		k_set = self.scan(h_map)
-
-		with Path("pass_0.txt").open('wt') as fid :
-			for key in sorted(k_set) :
-				fid.write(f"{key}\t{self.c_map[key]}\n")
-
-		for i in range(4) :
-
-			getattr(self, f"pass_{i+1}")(k_set)
-
-			with Path(f"pass_{i+1}.txt").open('wt') as fid :
-				for key in sorted(k_set) :
-					fid.write(f"{key}\t{self.c_map[key]}\n")
-
-		h_lst = list()
-		for key in sorted(self.c_map) :
-			h_lst.append( h_map[key] )
-		hash_pth.write_text('\n'.join(h_lst))
-
-		self.index_pth.save(self.c_map)
-
-		return
-			
-	# def scan(self, h_map) :
-	# 	k_set = set()
-
-	# 	for n, pth in enumerate(recurse_dir(self.c_dir)) :
-	# 		if pth.suffix.lower() in ['.mp3', '.flac', '.ogg', '.wav', 'wma'] :
-	# 			hash = hashlib.blake2b(pth.read_bytes()).hexdigest()[:12]
-
-	# 			key = str( pth.relative_to(self.c_dir) )
-	# 			if key in h_map and h_map[key] == hash :
-	# 				# the file didn't change, we don't process it at all
-	# 				print(f"= \x1b[32m{key}\x1b[0m")
-	# 				continue
-	# 			else :
-	# 				print(f"+ \x1b[31m{key}\x1b[0m")
-
-	# 			k_set.add(key)
-	# 			h_map[key] = hash
-
-	# 			t_map = dict()
-	# 			for k, v in mutagen.File(pth).items() :
-	# 				t_map[k] = v
-	# 			self.c_map[key] = t_map
-
-	# 	return k_set
 
 	def pass_1(self, tag_map) :
 		res_map = dict()
@@ -529,111 +364,3 @@ class MusichCatalog() :
 			res_map['releasetype'] = res_map['releasetype'].replace('/', ';')
 
 		return res_map
-
-
-
-		# 		if tag_before in self.meta_map :
-		# 				tag_after = tag_rename_map[tag_before]
-		# 				if tag_after in t_map :
-		# 					if t_map[tag_before] != t_map[tag_after] :
-		# 						raise ValueError(f"tag rename {tag_before} -> {tag_after}")
-		# 					else :
-		# 						print(f"extra {tag_before}")
-		# 						del t_map[tag_before]
-		# 				else :
-		# 					t_map[tag_after] = t_map[tag_before]
-		# 					del t_map[tag_before]
-
-		# 		for tag in list(t_map) :
-		# 			# remove comments (often contains crap)
-		# 			if tag.startswith('COMM:') or tag == 'Comment' :
-		# 				del t_map[tag]
-
-		# 		if 'TRCK' in t_map :
-		# 			tracknumber, tracktotal = None, None
-		# 			if '/' in t_map['TRCK'] :
-		# 				tracknumber, tracktotal = [int(i) for i in t_map['TRCK'].split('/')]
-		# 			else :
-		# 				tracknumber = int(t_map['TRCK'])
-		# 			if tracknumber is not None :
-		# 				t_map['tracknumber'] = tracknumber
-		# 				del t_map['TRCK']
-		# 			if tracktotal is not None :
-		# 				t_map['tracktotal'] = tracktotal
-
-		# 		if 'TPOS' in t_map :
-		# 			discnumber, disctotal = None, None
-		# 			if '/' in t_map['TPOS'] :
-		# 				discnumber, disctotal = [int(i) for i in t_map['TPOS'].split('/')]
-		# 			else :
-		# 				discnumber = int(t_map['TPOS'])
-		# 			if discnumber is not None :
-		# 				t_map['discnumber'] = discnumber
-		# 				del t_map['TPOS']
-		# 			if disctotal is not None :
-		# 				t_map['disctotal'] = disctotal
-				
-		# 		for tag in tag_integer_set :
-		# 			if tag in t_map :
-						
-
-		# 	self.meta_map[key] = t_map
-
-		# with Path("3_pass.txt").open('wt') as fid :
-		# 	for key in sorted(self.meta_map) :
-		# 		fid.write(f"{key}\t{self.meta_map[key]}\n")
-
-
-		# return
-
-		# self.third_pass_db.save(t_map, filter_opt={"verbose":True})
-		# (self.c_dir / '.database/meta.json.br').save(t_map)
-
-		# for key in t_map :
-		# 	for tag in list(t_map) :
-		# 		if tag.startswith("musicbrainz_") or tag in tag_delete_lst :
-		# 			del t_map[tag]
-
-		# stack = list()
-		# for p in sorted(t_map) :
-		# 	line = [p,] + [f"{k}={v}" for k, v in t_map[p].items()]
-		# 	stack.append(line)
-
-	# def scan(self) :
-	# 	for n, pth in enumerate(recurse_dir(self.c_dir)) :
-	# 		if pth.suffix.lower() in ['.mp3', '.flac', '.ogg'] :
-	# 			rel = pth.relative_to(self.c_dir)
-	# 			try :
-	# 				m = mutagen.File(pth)
-	# 				stack = list()
-	# 				for k in m :
-	# 					if isinstance(m[k], mutagen.id3.MCDI) :
-	# 						continue
-	# 					if ( isinstance(m[k], list) ) :
-	# 						v = ';'.join(m[k])
-	# 					else :
-	# 						if hasattr(m[k], 'mime') and m[k].mime == "image/jpeg" :
-	# 							continue
-	# 						v = m[k]
-	# 					stack.append([k, v])
-	# 					if isinstance(v, bytes) :
-	# 						print(pth, k)
-	# 						sys.exit(0)
-
-	# 				stack = sorted(stack)
-	# 				self.database[str(rel)] = '\t'.join(f"{k}:{v}" for k, v in stack)
-	# 				# print("{0}\t{1}".format(n, rel))
-	# 			except mutagen.mp3.HeaderNotFoundError :
-	# 				print("{0}\t{1}".format(n, rel), file=sys.stderr)
-
-	# def save(self, pth) :
-
-	# 	print("---", pth.resolve())
-
-	# 	db = (self.c_dir / "database.json.br").load()
-
-	# 	stack = list()
-	# 	for n, k in enumerate(sorted(db)) :
-	# 		stack.append(f'{k}\t{db[k]}')
-
-	# 	pth.write_text('\n'.join(stack))

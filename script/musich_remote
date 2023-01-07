@@ -6,7 +6,7 @@ import cherrypy
 
 from cc_pathlib import Path
 
-import musich.server
+import musich.remote
 
 musich_root_dir = Path(os.environ["MUSICH_root_DIR"])
 
@@ -25,7 +25,7 @@ musich_config = {
 	}
 }
 
-cherrypy.tree.mount(musich.server.MusishServer(), '/', config=musich_config)
+cherrypy.tree.mount(musich.remote.MusichRemote(), '/', config=musich_config)
 
 cherrypy.engine.start()
 cherrypy.engine.block()

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>musich</title>
+	<link rel="stylesheet" href="_static/css/style.css">
+	<script src="/_static/javascript/common.js"></script>
+	<script src="/_static/javascript/musich.js"></script>
+	<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed&display=swap" rel="stylesheet">
+</head>
+<body>
+	<div id="player_bar">
+		<audio id="player_bar_control" controls></audio>	
+	</div>
+	<div id="player_dsp">title</div>
+	<div id="player_nav">
+		<button id="player_nav_browse" disabled>Browse</button>
+		<button id="player_nav_search">Search</button>
+		<button id="player_nav_queue">Queue</button>
+		<button id="player_nav_history">History</button>
+	</div>
+	<div id="player_tab">
+		<div id="player_tab_browse">
+			<table id="browse_lst"></table>
+		</div>
+		<div id="player_tab_search" hidden>
+			<input id="search_input" disabled name="search_input" type="text">
+			<table id="search_lst"></table>
+		</div>
+		<div id="player_tab_queue" hidden>
+			<table id="queue_lst"></table>
+		</div>
+		<div id="player_tab_history" hidden>
+			<table id="history_lst"></table>
+		</div>
+	</div>
+<script>
+	var musich_handler = new MusichHandler();
+</script>
+</body>
+</html>
