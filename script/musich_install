@@ -1,0 +1,13 @@
+#!/usr/bin/env zsh
+
+if [[ -d ${MUSICH_root_DIR} ]]
+then
+	if [[ ! -d ${MUSICH_root_DIR}/py3venv ]]
+	then
+		pushd ${MUSICH_root_DIR}
+			python3 -m venv py3venv
+			source ${MUSICH_root_DIR}/py3venv/bin/activate
+			pip3 install cherrypy gobject mutagen
+		popd
+	fi
+fi

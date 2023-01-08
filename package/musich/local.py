@@ -130,10 +130,6 @@ class MusichLocal() :
 
 		if position_val and duration_val :
 			pass
-			
-
-
-
 
 	@cherrypy.expose
 	@cherrypy.tools.json_out()

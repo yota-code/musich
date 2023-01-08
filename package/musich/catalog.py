@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import base64
+import collections
 import datetime
 import hashlib
 import json
 import os
-from re import T
+# from re import T
 import sqlite3
 import sys
 
@@ -111,6 +112,7 @@ class MusichCatalog() :
 		self.meta_pth = (self.c_dir / ".database" / "meta.json")
 		self.file_pth = (self.c_dir / ".database" / "file.json")
 		self.search_pth = (self.c_dir / ".database" / "search.json")
+		self.album_pth = (self.c_dir / ".database" / "album.json")
 
 		self._load()
 
@@ -121,11 +123,23 @@ class MusichCatalog() :
 
 		self.hash_map = { v[0] : (k, v[1]) for k, v in self.file_map.items() }
 
+		self.album_map = collections.defaultdict(set)
+		for k in self.meta_map :
+			u = '/'.join(self.meta_map[k]['/'][:-1])
+			self.album_map[u].add((self.meta_map[k].get('tracknumber', 0), self.meta_map[k]['/'][-1], k))
+
+		for u in self.album_map :
+			self.album_map[u] = [(b, c) for a, b, c in sorted(self.album_map[u])]
+
+		del self.album_map[""]
+
 	def _save(self) :
 		self.meta_pth.save(self.meta_map)
 		self.file_pth.save(self.file_map)
 		self.search_pth.save(self.search_map)
-		
+
+		self.album_pth.save(self.album_map)
+
 		self.meta_pth.with_suffix('.json.br').save(self.meta_map)
 		self.file_pth.with_suffix('.json.br').save(self.file_map)
 		self.search_pth.with_suffix('.json.br').save(self.search_map)
@@ -138,6 +152,7 @@ class MusichCatalog() :
 
 	def key_to_hash(self, key) :
 		bin = self.key_to_path(key).read_bytes()
+		#TODO: on pourrait passer à 18 bytes (144 bits)
 		hsh = hashlib.blake2b(bin, salt=b"#musich", digest_size=24).digest()
 		b64 = base64.urlsafe_b64encode(hsh).decode('ascii')
 		return f'{b64}.{len(bin):X}'
@@ -149,7 +164,6 @@ class MusichCatalog() :
 		return int(self.key_to_path(key).stat().st_size)
 
 	def hsh_to_search(self, hsh) :
-
 		s_lst = [' '.join(self.meta_map[hsh]["/"]),]
 		for k in self.meta_map[hsh] :
 			if k == "/" :
@@ -206,7 +220,6 @@ class MusichCatalog() :
 
 		self.tag_set |= self.meta_map[hsh].keys()
 
-
 	def scan(self, * suffix_lst, parent_dir=None) :
 		""" scan all folders in the catalog folder, return a set of files """
 		if parent_dir is None :
@@ -234,7 +247,7 @@ class MusichCatalog() :
 		for key in to_be_deleted_set :
 			self.pop(key)
 
-		for key in key_set :
+		for key in sorted(key_set) :
 			pth = self.key_to_path(key)
 			if key in self.hash_map :
 				try :

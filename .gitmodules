@@ -1,3 +1,6 @@
 [submodule "ext/requiescat"]
 	path = ext/requiescat
 	url = https://github.com/yota-code/requiescat.git
+[submodule "ext/cc_pathlib"]
+	path = ext/cc_pathlib
+	url = https://github.com/yota-code/cc_pathlib.git
