@@ -12,8 +12,8 @@ import musich.catalog
 musich_dir = Path(os.environ["MUSICH_root_DIR"])
 
 cherrypy.config.update({
-	'server.socket_host': '127.0.0.1',
-	'server.socket_port': 45081,
+	'server.socket_host': os.environ["MUSICH_ip_ADDR"],
+	'server.socket_port': 2**15 + 1024*5 + 80, # = 37968
 }) # global config
 	
 musich_config = {

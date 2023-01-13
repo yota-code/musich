@@ -1,0 +1,14 @@
+
+export MUSICH_root_DIR=${0:a:h}
+export MUSICH_catalog_DIR=${MUSICH_root_DIR}/catalog
+export MUSICH_static_DIR=${MUSICH_root_DIR}/static
+export MUSICH_ip_ADDR="192.168.1.105"
+
+export PATH=${MUSICH_root_DIR}/script:$PATH
+export PYTHONPATH=${MUSICH_root_DIR}/package:$PYTHONPATH
+
+musich_install
+
+source ${MUSICH_root_DIR}/py3venv/bin/activate
+
+rehash
