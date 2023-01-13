@@ -5,53 +5,59 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>musich / local</title>
 	<link rel="stylesheet" href="_static/css/musich_local.css">
-	<script src="/_static/javascript/common.js"></script>
-	<script src="/_static/javascript/musich_local.js"></script>
+	<script async src="_static/javascript/requiescat/common.js"></script>
+	<script async src="_static/javascript/musich/catalog.js"></script>
+	<script async src="_static/javascript/musich/local.js"></script>
 	<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed&display=swap" rel="stylesheet">
 </head>
 <body>
 	<div id="player_control">
 		<span id="play_track_pth">♫ musich ♫</span><br/>
 		<!--<input id="play_prev_input" onclick="musich.play_pause()" type="button" value="prev">-->
-		<p>
-			<input id="play_range_input" style="width:85%;margin:auto;" min="0" max="100" type="range">
+		<p id="play_control">
+			<input id="play_range_input" min="0" max="100" type="range" onchange="musich.set_position(this.value)">
 			<input id="play_pause_input" onclick="musich.play_pause()" type="button" value="⏸️">
 			<input id="play_next_input" onclick="musich.play_next()" type="button" value="⏭️">
 		</p>
+		<p>
+			<label for="push_select">add</label>
+			<select id="push_select">
+				<option value="push_to_end">at the end</option>
+				<option value="push_after">just after</option>
+			</select>
+			<button>Full Album</button>
+		</p>
 	</div>
-	<hr>
-	<div id="tab_group">
-		<button class="tab_item" onclick="musich.switch_tab('search')">Search</button>
-		<button class="tab_item" onclick="musich.switch_tab('queue')">Queue</button>
-		<button class="tab_item" onclick="musich.switch_tab('history')">History</button>
-		<button class="tab_item" onclick="musich.switch_tab('browse')">Browse</button>
+	<div id="tab_select">
+		<button id="tab_select_search" class="tab_item" onclick="musich.switch_tab('search')">Search</button>
+		<button id="tab_select_queue" class="tab_item" onclick="musich.switch_tab('queue')">Queue</button>
+		<button id="tab_select_history" class="tab_item" onclick="musich.switch_tab('history')">History</button>
+		<button id="tab_select_browse" class="tab_item" onclick="musich.switch_tab('browse')">Browse</button>
 	</div>
 	<div id="tab_content">
-		<div id="tab_queue" style="display:none">
-			<h3>QUEUE</h3>
-			<ul id="queue_lst"></ul>
+		<div id="tab_content_queue" style="display:none">
+			<!--<h3>QUEUE</h3>-->
+			<table id="next_lst"></table>
 		</div>
-		<div id="tab_history" style="display:none">
-			<h3>HISTORY</h3>
-			<ul id="history_lst"></ul>
+		<div id="tab_content_history" style="display:none">
+			<!--<h3>HISTORY</h3>-->
+			<table id="prev_lst"></table>
 		</div>
-
-		<div id="tab_search">
-			<h3>SEARCH</h3>
-			<input id="search_input" disabled type="text" onchange="musich.search()">
+		<div id="tab_content_search">
+			<!--<h3>SEARCH</h3>-->
+			<input id="search_input" disabled type="text">
 			<table id="search_lst"></table>
 		</div>
-		<div id="tab_browse" style="display:none">
-			<h3>BROWSE</h3>
+		<div id="tab_content_browse" style="display:none">
+			<!--<h3>BROWSE</h3>-->
 			<table id="browse_lst"></table>
 		</div>
 	</div>
-
-
-<script>
-
-var musich = new MusichLocal();
-
+<script async>
+	var musich = null
+	window.onload = ((evt) => {
+		musich = new MusichLocal();
+	});
 </script>
 </body>
 </html>

@@ -15,83 +15,63 @@ import cherrypy
 
 from cc_pathlib import Path
 
-from musich.common import *
-
-# https://lazka.github.io/pgi-docs/Gst-1.0/classes/Element.html
+from musich.queue import MusichQueue
+from musich.player import MusichPlayer
 
 class MusichLocal() :
 	def __init__(self, static_dir, catalog_obj) :
-		Gst.init(None)
+		# Gst.init(None)
 
 		self.m_sta = static_dir
 
-		self.m_que = QueueLst() # queue, list of pieces to be played
-		self.m_hst = HistoryLst() # history, list of pieces already played
-
-		self.m_pos = -1
 		self.m_cat = catalog_obj
-		self.m_cur = None # name of the track currently played or paused
 
-		self.g = Gst.ElementFactory.make("playbin", "player")
+		stack_pth = self.m_cat.c_dir / ".database" / "stack.json"
+		self.m_que = MusichQueue(stack_pth)
 
-		self.g.connect("about-to-finish", self._about_to_finish)
-
-		self.dev_null = Gst.ElementFactory.make("fakesink", "fakesink")
-		self.g.set_property("video-sink", self.dev_null)
-
-		#self.player.set_property("uri", "file://" + "/mnt/workbench/source/musich/test/gstreamer/03.Dam.mp3")
-
-		self.m_bus = self.g.get_bus()
-		self.m_bus.add_signal_watch()
-		self.m_bus.connect("message", self.on_message)
-
-		# debug mode :
-		for pth in (self.m_cat.c_dir / 'sample').glob('*.wav') :
-			key = str(pth.relative_to(self.m_cat.c_dir))
-			if '4' in key or '5' in key :
-				self.m_que.add_after(key)
-			if '2' in key or '3' in key :
-				self.m_hst.push(key)
-
-		self._play()
+		self.m_ply = MusichPlayer(self.m_cat, self.m_que)
 
 	@cherrypy.expose
 	def index(self) :
 		return (self.m_sta / 'html' / 'local.html').read_text()
 
 	@cherrypy.expose
-	def _load_cat(self, * pos, ** nam) :
+	def _get_meta(self, * pos, ** nam) :
 		cherrypy.response.headers['Content-Type'] = 'text/javascript'
-		return (self.m_cat.c_dir / ".database" / "index.json").read_bytes()
+		return (self.m_cat.c_dir / ".database" / "meta.json").read_bytes()
 
-	# @cherrypy.expose
-	# @cherrypy.tools.json_out()
-	# def _load_que(self, * pos, **nam) :
-	# 	# cherrypy.response.headers['Content-Type'] = 'text/javascript'
-	# 	print(f"MusichLocal._load_que() -> {self.m_que}")
-	# 	return self.m_que
+	@cherrypy.expose
+	@cherrypy.tools.json_out()
+	def _get_stack(self, * pos, ** nam) :
+		return {
+			'next': self.m_que.next_lst,
+			'prev': self.m_que.prev_lst
+		}
 
-	# @cherrypy.expose
-	# @cherrypy.tools.json_out()
-	# def _load_hst(self, * pos, **nam) :
-	# 	# cherrypy.response.headers['Content-Type'] = 'text/javascript'
-	# 	print(f"MusichLocal._load_hst() -> {self.m_que}")
-	# 	return self.m_hst
+	@cherrypy.expose
+	@cherrypy.tools.json_out()
+	def _get_status(self, * pos, ** nam) :
+		return [
+			self.m_ply.play_track, # hash of the loaded track
+			self.m_ply.get_position(), # current progress on the track (in ms)
+			self.m_ply.get_duration(), # duration of the loaded track (in ms)
+			self.m_ply.play_status # status of the play (None: STOPPED, False: PAUSED, True: PLAYING)
+		]
 
-	# def is_valid_pos(self, i) :
-	# 	return 0 <= i < len(self.m_que)
+	@cherrypy.expose
+	@cherrypy.tools.json_out()
+	def _push_to_queue(self, * pos, ** nam) :
+		print(f"MusichLocal._push_to_queue({pos}, {nam})")
+		if 'h' in nam and nam['h'] in self.m_cat.meta_map :
+			if 'a' in nam :
+				pass # add the whole album
+			else :
+				if 'f' in nam :
+					self.m_que.push_to_next(nam['h'])
+				else :
+					self.m_que.push_to_end(nam['h'])
 
-	# @cherrypy.expose
-	# def play_next(self) :
-	# 	print(f"MusichLocal.play_next()", self.is_valid_pos(i))
-	# 	if self.is_valid_pos(i) :
-	# 		self._play( self.m_que.pop(self.m_pos) )
-
-	# @cherrypy.expose
-	# def play_next(self) :
-	# 	print(f"MusichLocal.play_next()")
-	# 	# self.m_que.que_lst.pop(self.m_pos)
-	# 	self._play()
+		return {'next': self.m_que.next_lst}
 
 	def _about_to_finish(self, * pos, ** nam) :
 		self._play()
@@ -124,65 +104,52 @@ class MusichLocal() :
 		self.g.set_property("uri", f"file://{m_pth}")
 		self.g.set_state(Gst.State.PLAYING)
 
-	def _get_pos_dur(self) :
-		position_val, position = self.g.query_position(Gst.Format.TIME)
-		duration_val, duration = self.g.query_duration(Gst.Format.TIME)
-
-		if position_val and duration_val :
-			pass
-
-	@cherrypy.expose
-	@cherrypy.tools.json_out()
-	def _get_status(self, * pos, ** nam) :
-		print(f"\n\nMusichLocal._get_status({pos}, {nam})")
-		#cherrypy.response.headers["Content-Type"] = "text/event-stream;charset=utf-8"
+	# @cherrypy.expose
+	# @cherrypy.tools.json_out()
+	# def _get_status(self, * pos, ** nam) :
+	# 	print(f"\n\nMusichLocal._get_status({pos}, {nam})")
+	# 	#cherrypy.response.headers["Content-Type"] = "text/event-stream;charset=utf-8"
 		
-		# hst_lst = list()
-		last_timestamp = int(nam['last_timestamp']) if 'last_timestamp' in nam else -1
-		# for k, v in self.m_hst.items() :
-		# 	if v > last_timestap :
-		# 		hst_lst.append(k)
+	# 	# hst_lst = list()
+	# 	last_timestamp = int(nam['last_timestamp']) if 'last_timestamp' in nam else -1
+	# 	# for k, v in self.m_hst.items() :
+	# 	# 	if v > last_timestap :
+	# 	# 		hst_lst.append(k)
 
-		return {
-			"cur": self.m_cur,
-			"_play_": self.g.get_state(1000).state == Gst.State.PLAYING,
-			"que": self.m_que.que_lst,
-			"hst": self.m_hst.get_status(last_timestamp),
-			"_last_": self.m_hst.hst_lst[-1][1],
-			"_pos_": [position, duration,],
-		}
-		# return f"data: {json.dumps(status)}\n\n"
+	# 	return {
+	# 		"cur": self.m_cur,
+	# 		"_play_": self.g.get_state(1000).state == Gst.State.PLAYING,
+	# 		"que": self.m_que.que_lst,
+	# 		"hst": self.m_hst.get_status(last_timestamp),
+	# 		"_last_": self.m_hst.hst_lst[-1][1],
+	# 		"_pos_": [position, duration,],
+	# 	}
+	# 	# return f"data: {json.dumps(status)}\n\n"
 
 	# @cherrypy.expose
 	# def play_prev(self) :
 	# 	self.play_at(self.m_pos - 1)
 
 	@cherrypy.expose
+	def _set_position(self, * pos, ** nam) :
+		if 't' in nam :
+			self.m_ply.set_position(int(nam['t']))
+
+	@cherrypy.expose
 	@cherrypy.tools.json_out()
-	def play_next(self, * pos, ** nam) :
+	def _play_next(self, * pos, ** nam) :
 		print(f"MusichLocal.play_next()")
-		self._play()
+		self.m_ply.pop()
 		return {
-			"cur": self.m_cur,
-			"_play_": self.g.get_state(1000).state == Gst.State.PLAYING,
+			'next': self.m_que.next_lst,
+			'prev': self.m_que.prev_lst
 		}
 
 	@cherrypy.expose
 	@cherrypy.tools.json_out()
-	def play_pause(self) :
+	def _play_pause(self) :
 		print(f"MusichLocal.play_pause()")
-		if self.g.get_state(1000).state == Gst.State.PLAYING :
-			self.g.set_state(Gst.State.PAUSED)
-			return {
-				"cur": self.m_cur,
-				'_play_': False,
-			}
-		else :
-			self.g.set_state(Gst.State.PLAYING)
-			return {
-				"cur": self.m_cur,
-				'_play_': True,
-			}
+		return self.m_ply.toggle()
 
 	def on_message(self, bus, message):
 		t = message.type
