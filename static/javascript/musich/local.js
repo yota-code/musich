@@ -9,97 +9,118 @@
 class MusichLocal {
 
 	constructor() {
-		this.m_cur = null;
-		this.last_timestamp = 0;
 
-		this.m_hst = new Array();
+		this.clock = new Date();
+		this.zero = this.clock.getTime();
+		this.start = 0;
 
-		this.m_cat = new Map();
-		this.load_cat();
-
-		this.m_que = new Array();
-		this.m_hst = new Array();
+		this.m_cat = new MusichCatalog();
+		this.m_cat.load().then(() => {
+			this.update_stack();
+			this.switch_tab('queue');
+			document.getElementById("search_input").disabled = false;
+		});
 
 		this.is_playing = false;
 
-		this.refresh = setInterval(() => {
-			this.request_status();
-		}, 30000);
+		/* this.refresh = setInterval(() => {
+			this.update_stack();
+		}, 5000); disabled for debug */
 
-		this.request_status();
+		this.progress = setInterval(() => {
+			this.update_status();
+		}, 1000); 
 
-		document.addEventListener("keyup", (evt) => {
-			// evt.preventDefault();
-			if (evt.key === "Enter") {
-				var txt = evt.target.value.trim();
+		this.prev_search = null;
+		var h_hinput = document.getElementById("search_input");
+		h_hinput.addEventListener("keyup", (evt) => {
+			evt.preventDefault();
+			var txt = evt.target.value.trim();
+			console.log(evt, txt);
+			if ( txt.length > 3 && this.prev_search !== txt ) {
 				this.search(txt);
+				this.prev_search = txt;
 			}
-		}, false);
-
-		document.getElementById("search_lst").addEventListener("click", (evt) => {
-			this.click_on_search_lst(evt);
 		}, false);
 	
 		return;
+	}
 
-		this.database = new Map();
-		
-		document.getElementById("search_input").addEventListener("change", (evt) => {
-			// evt.preventDefault();
-			this.search_local();
-		}, false);
+	update_status() {
+		// TODO: entretenir le temps passé sans faire un refresh aussi fréquent ?
+		prom_get_JSON(`_get_status`).then((obj) => {
 
-		document.addEventListener("keyup", (evt) => {
-			// evt.preventDefault();
-			if (event.key === "Enter") {
-				this.search_local();
+			var h_span = document.getElementById("play_track_pth");
+			var h_range = document.getElementById("play_range_input");
+			var h_pause = document.getElementById("play_pause_input");
+
+			if ( obj[0] === null ) {
+				h_span.textContent = "♫ musich ♫";
+				h_range.value = 0;
+				h_range.max = 100;
+				h_pause.value = "▶️";
+			} else {
+				h_span.textContent = this.m_cat.hsh_to_display(obj[0]);
+				h_range.value = obj[1];
+				h_range.max = obj[2];
+				h_pause.value = (obj[3]) ? "⏸️" : "▶️";
 			}
-		}, false);
 
-		document.getElementById("local_lst").addEventListener("click", (evt) => {
-			// evt.preventDefault();
-			this.click_on_local_lst(evt);
-		}, false);
+			h_pause.disabled = false;
+		});
+	}
 
+	update_stack() {
+		prom_get_JSON('_get_stack?&p=true&n=true').then((obj) => {
+			this.refresh_stack(obj);
+		});
+	}
 
-		document.getElementById("queue_lst").addEventListener("click", (evt) => {
-			this.click_on_queue_lst(evt);
-		}, false);
-
-		document.getElementById("player").addEventListener("ended", (evt) => {
-			if (this.queue_pos + 1 < this.queue_lst.length) {
-				this.play_now(this.queue_pos + 1);
+	refresh_stack(obj) {
+		/* obj could contains either next or prev or both */
+		for ( let [key, value] of Object.entries(obj) ) {
+			var h_table = document.getElementById(`${key}_lst`);
+			h_table.clear();
+			for ( let hsh of value ) {
+				var h_tr = h_table.grow('tr');
+				var m_meta = this.m_cat.meta_obj[hsh];
+				h_tr.grow('td').add_text(this.m_cat.hsh_to_display(hsh));
 			}
-		}, false);
+		}
+	}
 
+	set_position(value) {
+		console.log("set position", value);
+		prom_get(`_set_position?&t=${value}`);
 	}
 
 	switch_tab(name) {
-		for (let tab of document.getElementById("tab_content").children) {
-			tab.style.display = (`tab_${name}` === tab.id) ? null : "none";
+		for (let h_button of document.getElementById("tab_select").children) {
+			h_button.style.backgroundColor = (`tab_select_${name}` === h_button.id) ? "lightblue" : "white";
+		}
+		for (let h_div of document.getElementById("tab_content").children) {
+			h_div.style.display = (`tab_content_${name}` === h_div.id) ? null : "none";
 		}
 	}
 
-	disp_que() {
-		console.log("MusichLocal.disp_que()");
-		var h_ul = document.getElementById("queue_lst");
-		h_ul.clear();
-		for (let k of this.m_que) {
-			h_ul.grow("li").add_text(k);
+	search(txt) {
+		console.log(`>>> MusichLocal.search(${txt})`);
+
+		var result_set = this.m_cat.search(txt);
+
+		var h_table = document.getElementById("search_lst");
+		h_table.clear();
+
+		for ( let hsh of result_set ) {
+			var h_tr = h_table.grow('tr');
+			var h_td = h_tr.grow('td').add_text(this.m_cat.hsh_to_display(hsh));
+			h_td.onclick = ((evt) => { this.push_to_queue(hsh); });
 		}
 	}
 
-	disp_hst(len) {
-		console.log(`MusichLocal.disp_hst(${len})`);
-		var h_ul = document.getElementById("history_lst");
-		for (let k of this.m_hst.slice(-len)) {
-			h_ul.grow("li").add_text(k);
-		}
-	}
-
-	request_status() {
-		get_json(`/_get_status?last_timestamp=${this.last_timestamp}`).then((obj) => {
-			this.update_status(obj);
+	push_to_queue(hsh) {
+		prom_get_JSON(`_push_to_queue?&h=${hsh}`).then((obj) => {
+			this.refresh_stack(obj);
 		});
 	}
 
@@ -135,99 +156,33 @@ class MusichLocal {
 			h_input.value = 100.0 * position / duration;
 		}
 
-
 		var h_input = document.getElementById("play_pause_input");
 
 		h_input.value = (this.is_playing) ? "⏸️" : "▶️";
 		h_input.disabled = false;
 	}
 
-
-
-		// 	var key = obj["key"];
-
-		// 	h_span.innerText = key;
-
-		// 	if (this.m_que.length > 0 && key === this.m_que[0]) {
-
-		// 		this.m_que.shift();
-		// 		var h_ul = document.getElementById("queue_lst");
-		// 		h_ul.firstChild.remove();
-
-		// 		this.m_hst.push(key);
-		// 		var h_ul = document.getElementById("history_lst");
-		// 		h_ul.grow("li").add_text(key);
-		// 	}
-		// } else {
-			
-		// }
-
-	load_cat() {
-		console.log("MusichLocal._load_cat()");
-
-		var h_table = document.getElementById("browse_lst");
-		get_json("/_load_cat").then((obj) => {
-			for ( let [key, val] of Object.entries(obj) ) {
-				this.m_cat.set(key, val);
-				var h_tr = h_table.grow("tr")
-				h_tr.grow("td").add_text("now");
-				h_tr.grow("td").add_text("next");
-				h_tr.grow("td").add_text(key);
-			}
-			document.getElementById("search_input").disabled = false;
-
-			// test
-			this.search("test");
-		});
-	}
-
 	play_pause() {
 		console.log("MusichLocal.play_pause()");
 
-		this.is_playing = ! this.is_playing;
-
 		var h_input = document.getElementById("play_pause_input");
-		h_input.value = (this.is_playing) ? "⏸️" : "▶️";
-
 		h_input.disabled = true;
 
-		get_json("/play_pause").then((obj) => {
-			this.update_status(obj);
+		prom_get("_play_pause").then((obj) => {
+			console.log(obj);
+			h_input.value = (obj) ? "⏸️" : "▶️";
+			h_input.disabled = false;
+
 		});
 	}
 
 	play_next() {
 		console.log("MusichLocal.play_next()");
-		get_json("/play_next").then((obj) => {
-			this.update_status(obj);
+		prom_get_JSON("_play_next").then((obj) => {
+			this.refresh_stack(obj);
 		});
 	}
 
-	search(txt) {
-		console.log(`>>> MusichLocal.search(${txt})`);
-
-		var h_table = document.getElementById("search_lst");
-		if (! txt) {
-			h_table.clear();
-		}
-
-		var rec = new RegExp(txt, 'iu');
-
-		var result_set = new Set();
-		for (let [key, val] of this.m_cat.entries()) {
-			if ( rec.test(key) || rec.test(val) ) {
-				result_set.add(key);
-			}
-		}
-		var result_lst = [... result_set];
-
-		for (let key of result_lst) {
-			var h_tr = h_table.grow("tr")
-			h_tr.grow("td").add_text("now");
-			h_tr.grow("td").add_text("next");
-			h_tr.grow("td").add_text(key);
-		}
-	}
 
 	click_on_search_lst(evt) {
 		if (evt.target.tagName === 'TD') {
@@ -261,17 +216,3 @@ class MusichLocal {
 
 
 }
-
-/*
-.then((obj) => {
-			for (let line of obj.split('\n')) {
-				var [key, val] = line.split('\t', 2);
-				this.database.set(
-					key,
-					line.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-				);
-			}
-			document.getElementById("search_input").disabled = false;
-			this.search_local();
-		})
-*/

@@ -88,7 +88,7 @@ class MusichCatalog() :
 
 	"""
 		meta.json : hash -> all meta content, sent to the client
-		file.json : hash -> (key, mtime, msize) not known by the client
+		file.json : hash -> (key, mtime) not known by the client
 
 		in c_dir, the first level directory must contains not information about the music
 		c_dir / key is always a music file
@@ -104,26 +104,28 @@ class MusichCatalog() :
 		'.wma' : "audio/x-ms-wma"
 	}
 
-	def __init__(self, catalog_dir) :
-		
-		self.e_lst = list( self.mime )
-		self.c_dir = catalog_dir.resolve()
+	def __init__(self) :
+
+		self.c_dir = Path(os.environ["MUSICH_catalog_DIR"]).resolve()
+		self.e_lst = list(self.mime)
 
 		self.meta_pth = (self.c_dir / ".database" / "meta.json")
 		self.file_pth = (self.c_dir / ".database" / "file.json")
-		self.search_pth = (self.c_dir / ".database" / "search.json")
-		self.album_pth = (self.c_dir / ".database" / "album.json")
+		# self.search_pth = (self.c_dir / ".database" / "search.json")
+		# self.album_pth = (self.c_dir / ".database" / "album.json")
 
 		self._load()
 
 	def _load(self) :
 		self.meta_map = self.meta_pth.load() if self.meta_pth.is_file() else dict()
 		self.file_map = self.file_pth.load() if self.file_pth.is_file() else dict()
-		self.search_map = self.search_pth.load() if self.search_pth.is_file() else dict()
+		# self.search_map = self.search_pth.load() if self.search_pth.is_file() else dict()
 
 		self.hash_map = { v[0] : (k, v[1]) for k, v in self.file_map.items() }
 
+	def _prep_album(self) :
 		self.album_map = collections.defaultdict(set)
+
 		for k in self.meta_map :
 			u = '/'.join(self.meta_map[k]['/'][:-1])
 			self.album_map[u].add((self.meta_map[k].get('tracknumber', 0), self.meta_map[k]['/'][-1], k))
@@ -136,19 +138,22 @@ class MusichCatalog() :
 	def _save(self) :
 		self.meta_pth.save(self.meta_map)
 		self.file_pth.save(self.file_map)
-		self.search_pth.save(self.search_map)
-
-		self.album_pth.save(self.album_map)
 
 		self.meta_pth.with_suffix('.json.br').save(self.meta_map)
 		self.file_pth.with_suffix('.json.br').save(self.file_map)
-		self.search_pth.with_suffix('.json.br').save(self.search_map)
+
+		# self.album_pth.save(self.album_map)
+		# self.search_pth.save(self.search_map)
+		# self.search_pth.with_suffix('.json.br').save(self.search_map)
 
 	def key_to_part(self, key) :
 		return Path(key).with_suffix('').parts[1:]
 
 	def key_to_path(self, key) :
 		return self.c_dir / key
+
+	def hash_to_path(self, hsh) :
+		return self.c_dir / self.file_map[hsh][0]
 
 	def key_to_hash(self, key) :
 		bin = self.key_to_path(key).read_bytes()

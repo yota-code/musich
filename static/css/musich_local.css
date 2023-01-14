@@ -1,5 +1,21 @@
 
 
+#play_control {
+	width: auto;
+	border:1px red solid;
+	display:flex;
+	flex-direction: row;
+	justify-content: space-around;
+}
+
+#play_pause_input, #play_next_input {
+	width: 30px;
+}
+
+#play_range_input {
+	flex:auto;
+}
+
 table {
 	width : 100%;
 	margin: auto;
@@ -19,12 +35,31 @@ td {
 	width: 1em;
 }
 
+#tab_select {
+	width: 100%;
+}
+
+#tab_select {
+	padding: 0px;
+	margin: 0px;
+	font-size:0;
+}
+
+button {
+	background-color: white;
+	border: none;
+	width:25%;
+	padding: 0px;
+	margin: 0px;
+	height: 2em;
+}
+
 body {
 	margin: auto;
 	width:100%;
-	background-color: : orange;
+	background-color: lightgray;
 	box-sizing: border-box;
-
+	font-family: 'Roboto Condensed', sans-serif;
 }
 
 #player_bar {
@@ -36,9 +71,7 @@ body {
 
 }
 
-#player_list {
-	font-family: 'Roboto Condensed', sans-serif;
-	padding-top: 6em;
+#tab_content div table {
 	background-color: lightblue;
 	width:100%;
 	margin:auto;

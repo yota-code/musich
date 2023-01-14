@@ -7,7 +7,8 @@ then
 		pushd ${MUSICH_root_DIR}
 			python3 -m venv py3venv
 			source ${MUSICH_root_DIR}/py3venv/bin/activate
-			pip3 install cherrypy gobject mutagen
+			sudo apt install libcairo2-dev libgirepository1.0-dev gir1.2-gtk-3.0
+			pip3 install cherrypy pygobject mutagen brotli
 		popd
 	fi
 fi

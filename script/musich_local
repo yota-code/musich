@@ -8,8 +8,10 @@ from cc_pathlib import Path
 
 import musich.local
 import musich.catalog
+import musich.queue
 
-musich_dir = Path(os.environ["MUSICH_root_DIR"])
+root_dir = Path(os.environ["MUSICH_root_DIR"]).resolve()
+static_dir = Path(os.environ["MUSICH_static_DIR"]).resolve()
 
 cherrypy.config.update({
 	'server.socket_host': os.environ["MUSICH_ip_ADDR"],
@@ -18,7 +20,7 @@ cherrypy.config.update({
 	
 musich_config = {
 	'/': {
-		'tools.staticdir.root': str(musich_dir),
+		'tools.staticdir.root': str(root_dir),
 	},
 	'/_static' : {
 		'tools.staticdir.on': True,
@@ -26,9 +28,14 @@ musich_config = {
 	}
 }
 
-musich_catalog = musich.catalog.MusichCatalog(musich_dir / "catalog")
+musich_catalog = musich.catalog.MusichCatalog()
 
-cherrypy.tree.mount(musich.local.MusichLocal(musich_dir / "static", musich_catalog), '/', config=musich_config)
+
+musich_obj = musich.local.MusichLocal(static_dir, musich_catalog)
+
+cherrypy.tree.mount(musich_obj, '/musich', config=musich_config)
 
 cherrypy.engine.start()
+
+musich_obj.m_ply.loop()
 cherrypy.engine.block()
