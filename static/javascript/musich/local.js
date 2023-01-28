@@ -10,26 +10,35 @@ class MusichLocal {
 
 	constructor() {
 
-		this.clock = new Date();
-		this.zero = this.clock.getTime();
-		this.start = 0;
+		this.play_start = 0 ;
+		this.play_stop = 0 ;
+		this.play_status = null;
+		this.play_position = 0;
+
+		this.version = {
+			'prev': -1,
+			'next': -1
+		};
 
 		this.m_cat = new MusichCatalog();
 		this.m_cat.load().then(() => {
-			this.update_stack();
+			this.fetch();
 			this.switch_tab('queue');
 			document.getElementById("search_input").disabled = false;
 		});
 
-		this.is_playing = false;
 
-		/* this.refresh = setInterval(() => {
-			this.update_stack();
-		}, 5000); disabled for debug */
+		setInterval(() => {
+			this.fetch();
+		}, 5000);
 
-		this.progress = setInterval(() => {
-			this.update_status();
-		}, 1000); 
+		var h_range = document.getElementById("play_range_input");
+		setInterval(() => {
+			if ( this.play_status == true ) {
+				this.play_position = (this.play_start == 0) ? (0) : (Date.now() - this.play_start);
+				h_range.value = this.play_position;
+			}
+		}, 250);
 
 		this.prev_search = null;
 		var h_hinput = document.getElementById("search_input");
@@ -41,57 +50,101 @@ class MusichLocal {
 				this.search(txt);
 				this.prev_search = txt;
 			}
-		}, false);
-	
-		return;
+		}, false);	
 	}
 
-	update_status() {
-		// TODO: entretenir le temps passé sans faire un refresh aussi fréquent ?
-		prom_get_JSON(`_get_status`).then((obj) => {
+	fetch() {
+		prom_get_JSON(`_get_info?&n=${this.version['next']}&p=${this.version['prev']}`).then((obj) => {
+			this.refresh(obj);			
+		});
+	}
+
+	refresh(obj) {
+		/* refresh:
+			- the tab [queue], if the key 'next' is present
+			- the tab [history], if the key 'prev' is present
+			- the player information, if the key 'play' is present, whose fields are :
+				- the hsh of the track loaded (playing or paused), or null if none
+				- the position in the track
+				- the duration of the track
+				- the status with convention null for STOPPED, false for PAUSED, true for PLAYING
+		*/
+
+		console.log(obj);
+
+		if ( obj.hasOwnProperty('track') ) {
+			let [hsh, pos, dur, pps] = obj['track'];
 
 			var h_span = document.getElementById("play_track_pth");
 			var h_range = document.getElementById("play_range_input");
 			var h_pause = document.getElementById("play_pause_input");
 
-			if ( obj[0] === null ) {
+			if ( hsh === null ) {
 				h_span.textContent = "♫ musich ♫";
+				this.play_start = 0;
+				this.play_position = 0;
 				h_range.value = 0;
 				h_range.max = 100;
 				h_pause.value = "▶️";
+				h_pause.disabled = true;
 			} else {
-				h_span.textContent = this.m_cat.hsh_to_display(obj[0]);
-				h_range.value = obj[1];
-				h_range.max = obj[2];
-				h_pause.value = (obj[3]) ? "⏸️" : "▶️";
+				h_span.textContent = this.m_cat.hsh_to_display(hsh);
+				if ( pos !== null ) {
+					this.play_start = Date.now() - pos;
+					this.play_position = pos;
+				}
+				h_range.max = dur;
+				h_pause.value = (pps) ? "⏸️" : "▶️";
+				h_pause.disabled = false;
 			}
 
-			h_pause.disabled = false;
-		});
-	}
+			this.play_status = pps;
+			h_range.value = this.play_position;
+		}
 
-	update_stack() {
-		prom_get_JSON('_get_stack?&p=true&n=true').then((obj) => {
-			this.refresh_stack(obj);
-		});
-	}
-
-	refresh_stack(obj) {
-		/* obj could contains either next or prev or both */
-		for ( let [key, value] of Object.entries(obj) ) {
-			var h_table = document.getElementById(`${key}_lst`);
-			h_table.clear();
-			for ( let hsh of value ) {
-				var h_tr = h_table.grow('tr');
-				var m_meta = this.m_cat.meta_obj[hsh];
-				h_tr.grow('td').add_text(this.m_cat.hsh_to_display(hsh));
+		for ( let key  of ['prev', 'next'] ) {
+			if ( obj.hasOwnProperty(key) ) {
+				var h_table = document.getElementById(`${key}_lst`);
+				h_table.clear();
+				var n=0;
+				for ( let hsh of obj[key][1]) {
+					var h_tr = h_table.grow('tr', {
+						'onclick': (key === 'prev') ?
+						`musich.queue_push("${hsh}")` :
+						`musich.queue_pull("${hsh}", ${n})`
+					});
+					var m_meta = this.m_cat.meta_obj[hsh];
+					h_tr.grow('td').add_text(this.m_cat.hsh_to_display(hsh));
+					n += 1;
+				}
+				this.version[key] = obj[key][0];
 			}
 		}
 	}
 
-	set_position(value) {
-		console.log("set position", value);
-		prom_get(`_set_position?&t=${value}`);
+	queue_push(hsh) {
+		console.log(`MusichLocal.queue_push(${hsh})`);
+		prom_get_JSON(`_push_to_queue?&h=${hsh}`).then((obj) => {
+			this.refresh(obj);
+		});
+	}
+
+	queue_pull(hsh, index) {
+		console.log(`MusichLocal.queue_pull(${hsh}, ${index})`);
+		prom_get_JSON(`_pull_from_queue?&h=${hsh}&i=${index}`).then((obj) => {
+			this.refresh(obj);
+		});
+	}
+
+	jump_to(pos) {
+		var h_range = document.getElementById("play_range_input");
+		this.play_start = this.play_start + ( pos - this.play_position );
+		this.play_position = pos;
+		h_range.value = this.play_position;
+
+		prom_get_JSON(`_set_position?&t=${pos}`).then((obj) => {
+			this.refresh(obj);
+		});
 	}
 
 	switch_tab(name) {
@@ -112,79 +165,37 @@ class MusichLocal {
 		h_table.clear();
 
 		for ( let hsh of result_set ) {
-			var h_tr = h_table.grow('tr');
+			var h_tr = h_table.grow('tr', {'onclick' : `musich.queue_push("${hsh}")`});
 			var h_td = h_tr.grow('td').add_text(this.m_cat.hsh_to_display(hsh));
 			h_td.onclick = ((evt) => { this.push_to_queue(hsh); });
 		}
 	}
 
-	push_to_queue(hsh) {
-		prom_get_JSON(`_push_to_queue?&h=${hsh}`).then((obj) => {
-			this.refresh_stack(obj);
-		});
-	}
-
-	update_status(obj) {
-		console.log(`MusichLocal.update_status(${JSON.stringify(obj)})`);
-		var h_span = document.getElementById("play_track_pth");
-
-		if ( obj.hasOwnProperty("cur") ) {
-			h_span.innerText = ( obj["cur"] === null ) ? "♫ musich ♫" : obj["cur"];
-		}
-		if ( obj.hasOwnProperty("que") ) {
-			if ( obj["que"].length ) {
-				this.m_que = obj["que"];
-				this.disp_que();
-			}
-		}
-		if ( obj.hasOwnProperty("hst") ) {
-			if ( obj["hst"].length ) {
-				this.m_hst = this.m_hst.concat(obj["hst"]);
-				this.disp_hst(obj["hst"].length);
-			}
-		}
-		if ( obj.hasOwnProperty("_last_") ) {
-			this.last_timestamp = obj["_last_"];
-		}
-		if ( obj.hasOwnProperty("_play_") ) {
-			this.is_playing = obj['_play_'];
-		}
-
-		if ( obj.hasOwnProperty("_pos_") ) {
-			var [position, duration] = obj['_pos_'];
-			var h_input = document.getElementById("play_range_input");
-			h_input.value = 100.0 * position / duration;
-		}
-
-		var h_input = document.getElementById("play_pause_input");
-
-		h_input.value = (this.is_playing) ? "⏸️" : "▶️";
-		h_input.disabled = false;
-	}
-
 	play_pause() {
 		console.log("MusichLocal.play_pause()");
 
+		/* as soon as the button is clicked, some default action are taken waiting for the answer from the server */
 		var h_input = document.getElementById("play_pause_input");
 		h_input.disabled = true;
 
+		if ( this.play_status !== null ) {
+			this.play_status = !(this.play_status);
+		}
+		
 		prom_get("_play_pause").then((obj) => {
-			console.log(obj);
-			h_input.value = (obj) ? "⏸️" : "▶️";
-			h_input.disabled = false;
-
+			this.refresh(obj);
 		});
 	}
 
 	play_next() {
 		console.log("MusichLocal.play_next()");
 		prom_get_JSON("_play_next").then((obj) => {
-			this.refresh_stack(obj);
+			this.refresh(obj);
 		});
 	}
 
 
-	click_on_search_lst(evt) {
+	/*click_on_search_lst(evt) {
 		if (evt.target.tagName === 'TD') {
 			var [col, row, what] = this.get_col_row(evt.target);
 			console.log(`MusicLocal.click_on_search_lst(${col}, ${row}, ${what})`);
@@ -202,9 +213,9 @@ class MusichLocal {
 				this.refresh_queue_lst();
 			}
 		}
-	}
+	}*/
 
-	get_col_row(elem) {
+	/*get_col_row(elem) {
 		var h_td = elem;
 		var h_tr = h_td.parentNode;
 		var col  = Array.prototype.indexOf.call(h_tr.children, h_td);
@@ -212,7 +223,7 @@ class MusichLocal {
 		var row  = Array.prototype.indexOf.call(h_table.children, h_tr);
 		var key = h_tr.lastChild.innerText;
 		return [col, row, key];
-	}
+	}*/
 
 
 }

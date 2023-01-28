@@ -1,7 +1,11 @@
 
 class MusichCatalog {
 
-	/* handle the catalog database */
+	/* the catalog is used both in remote and local
+
+	it downloads the meta.json only and rebuild the search_map and tree_map
+
+	*/
 
 	constructor() {
 		this.meta_obj = new Object();
