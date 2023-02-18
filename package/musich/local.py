@@ -22,7 +22,7 @@ class MusichLocal() :
 	def __init__(self, static_dir, catalog_obj) :
 		# Gst.init(None)
 
-		self.m_sta = static_dir
+		self.m_sta = Path(os.environ["MUSICH_static_DIR"]).resolve()
 
 		self.m_cat = catalog_obj
 

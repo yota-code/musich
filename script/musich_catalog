@@ -5,11 +5,9 @@ import sys
 
 from cc_pathlib import Path
 
-from musich.catalog import MusichCatalog
+from musich.catalog import MusichScanner
 
-catalog_dir = Path(os.environ["MUSICH_catalog_DIR"]).resolve()
-
-u = MusichCatalog(catalog_dir)
+u = MusichScanner()
 
 do_everything = True
 for arg in sys.argv[1:] :

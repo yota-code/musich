@@ -13,6 +13,9 @@ gi.require_version('Gst', '1.0')
 
 from gi.repository import Gst, GLib
 
+Gst.debug_set_default_threshold(Gst.DebugLevel.WARNING)
+
+
 class ToggleMode(enum.IntEnum):
 	STOP = -1
 	PAUSE = 0

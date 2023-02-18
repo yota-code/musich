@@ -3,10 +3,10 @@
 import base64
 import collections
 import datetime
+import dbm.gnu
 import hashlib
 import json
 import os
-# from re import T
 import sqlite3
 import sys
 
@@ -85,7 +85,15 @@ def _recurse_dir(parent_dir, depth=0) :
 # un fichier json prend bien moins de place qu'une base de données, et en plus on peut l'envoyer directement
 
 class MusichCatalog() :
+	def __init__(self, catalog_dir) :
+		self.c_dir = catalog_dir
+		self.c_pth = (self.c_dir / ".database" / "file.dbm")
+		self.c_dbm = dbm.gnu.open(str(self.c_pth), 'ru')
 
+	def __getitem__(self, key) :
+		return self.c_dbm[key.encode('utf8')].decode('utf8')
+
+class MusichScanner() :
 	"""
 		meta.json : hash -> all meta content, sent to the client
 		file.json : hash -> (key, mtime) not known by the client
@@ -111,15 +119,12 @@ class MusichCatalog() :
 
 		self.meta_pth = (self.c_dir / ".database" / "meta.json")
 		self.file_pth = (self.c_dir / ".database" / "file.json")
-		# self.search_pth = (self.c_dir / ".database" / "search.json")
-		# self.album_pth = (self.c_dir / ".database" / "album.json")
 
 		self._load()
 
 	def _load(self) :
 		self.meta_map = self.meta_pth.load() if self.meta_pth.is_file() else dict()
 		self.file_map = self.file_pth.load() if self.file_pth.is_file() else dict()
-		# self.search_map = self.search_pth.load() if self.search_pth.is_file() else dict()
 
 		self.hash_map = { v[0] : (k, v[1]) for k, v in self.file_map.items() }
 
@@ -137,14 +142,17 @@ class MusichCatalog() :
 
 	def _save(self) :
 		self.meta_pth.save(self.meta_map)
-		self.file_pth.save(self.file_map)
-
 		self.meta_pth.with_suffix('.json.br').save(self.meta_map)
+
+		self.file_pth.save(self.file_map)
 		self.file_pth.with_suffix('.json.br').save(self.file_map)
 
-		# self.album_pth.save(self.album_map)
-		# self.search_pth.save(self.search_map)
-		# self.search_pth.with_suffix('.json.br').save(self.search_map)
+		dbm_pth = self.file_pth.with_suffix('.dbm')
+		with dbm.gnu.open(str(dbm_pth), 'nf') as db :
+			for key, (fname, mtime) in self.file_map.items() :
+				db[key.encode('utf8')] = fname.encode('utf8')
+			db.reorganize()
+			db.sync()
 
 	def key_to_part(self, key) :
 		return Path(key).with_suffix('').parts[1:]
@@ -168,18 +176,18 @@ class MusichCatalog() :
 	def key_to_size(self, key) :
 		return int(self.key_to_path(key).stat().st_size)
 
-	def hsh_to_search(self, hsh) :
-		s_lst = [' '.join(self.meta_map[hsh]["/"]),]
-		for k in self.meta_map[hsh] :
-			if k == "/" :
-				continue
-			m = str(self.meta_map[hsh][k])
-			for s in s_lst[:] :
-				if m in s :
-					break
-			else :
-				s_lst.append(m)
-		return s_lst[0] + '\t' + ' '.join(s_lst[1:])
+	# def hsh_to_search(self, hsh) :
+	# 	s_lst = [' '.join(self.meta_map[hsh]["/"]),]
+	# 	for k in self.meta_map[hsh] :
+	# 		if k == "/" :
+	# 			continue
+	# 		m = str(self.meta_map[hsh][k])
+	# 		for s in s_lst[:] :
+	# 			if m in s :
+	# 				break
+	# 		else :
+	# 			s_lst.append(m)
+	# 	return s_lst[0] + '\t' + ' '.join(s_lst[1:])
 
 	def key_to_meta(self, key) :
 		pth = self.key_to_path(key)
@@ -219,7 +227,6 @@ class MusichCatalog() :
 
 		self.file_map[hsh] = [key, mtm]
 		self.meta_map[hsh] = self.key_to_meta(key)
-		self.search_map[hsh] = self.hsh_to_search(hsh)
 
 		self.hash_map[key] = [hsh, mtm]
 

@@ -124,7 +124,7 @@ class MusichLocal {
 		});
 	}
 
-	update_status(obj) {
+	/*update_status(obj) {
 		console.log(`MusichLocal.update_status(${JSON.stringify(obj)})`);
 		var h_span = document.getElementById("play_track_pth");
 
@@ -160,7 +160,7 @@ class MusichLocal {
 
 		h_input.value = (this.is_playing) ? "⏸️" : "▶️";
 		h_input.disabled = false;
-	}
+	}*/
 
 	play_pause() {
 		console.log("MusichLocal.play_pause()");

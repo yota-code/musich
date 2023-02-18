@@ -12,6 +12,7 @@ import musich.queue
 
 root_dir = Path(os.environ["MUSICH_root_DIR"]).resolve()
 static_dir = Path(os.environ["MUSICH_static_DIR"]).resolve()
+catalog_dir = Path(os.environ["MUSICH_catalog_DIR"]).resolve()
 
 cherrypy.config.update({
 	'server.socket_host': os.environ["MUSICH_ip_ADDR"],
@@ -19,17 +20,16 @@ cherrypy.config.update({
 }) # global config
 	
 musich_config = {
-	'/': {
-		'tools.staticdir.root': str(root_dir),
-	},
+	# '/': {
+	# 	'tools.staticdir.root': str(root_dir),
+	# },
 	'/_static' : {
 		'tools.staticdir.on': True,
-		'tools.staticdir.dir': "static",
+		'tools.staticdir.dir': str(static_dir),
 	}
 }
 
-musich_catalog = musich.catalog.MusichCatalog()
-
+musich_catalog = musich.catalog.MusichCatalog(catalog_dir)
 
 musich_obj = musich.local.MusichLocal(static_dir, musich_catalog)
 
