@@ -5,6 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>musich / local</title>
 	<link rel="stylesheet" href="_static/css/musich_local.css">
+	<link rel="icon" type="image/png" href="_static/img/favicon_16.png">
 	<script async src="_static/javascript/requiescat/common.js"></script>
 	<script async src="_static/javascript/musich/catalog.js"></script>
 	<script async src="_static/javascript/musich/local.js"></script>
@@ -15,7 +16,7 @@
 		<span id="play_track_pth">♫ musich ♫</span><br/>
 		<!--<input id="play_prev_input" onclick="musich.play_pause()" type="button" value="prev">-->
 		<p id="play_control">
-			<input id="play_range_input" min="0" max="100" type="range" onchange="musich.set_position(this.value)">
+			<input id="play_range_input" min="0" max="100" type="range" onchange="musich.jump_to(this.value)">
 			<input id="play_pause_input" onclick="musich.play_pause()" type="button" value="⏸️">
 			<input id="play_next_input" onclick="musich.play_next()" type="button" value="⏭️">
 		</p>

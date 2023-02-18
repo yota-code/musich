@@ -24,15 +24,18 @@ class ToggleMode(enum.IntEnum):
 
 class MusichPlayer() :
 	""" code for the local player backend """
-	def __init__(self, catalog_obj, queue_obj) :
-
-		Gst.init(None)
+	def __init__(self, m_queue, m_catalog) :
 
 		self.play_track = None
-		self.play_status = None
 
-		self.m_cat = catalog_obj
-		self.m_que = queue_obj
+		self.m_queue = m_queue
+		self.m_catalog = m_catalog
+
+		self.g_start()
+
+	def g_start(self) :
+
+		Gst.init(None)
 
 		self.gst = Gst.ElementFactory.make("playbin", "player")
 		self.gst.connect("about-to-finish", self._about_to_finish)
@@ -43,7 +46,18 @@ class MusichPlayer() :
 		self.bus.add_signal_watch()
 		self.bus.connect("message", self._on_message)
 
-		self.pop()
+		self.g_loop = GLib.MainLoop()
+
+	def g_block(self) :
+		# self.pop()
+		self.g_loop.run()
+
+	def g_stop(self) :
+		self.g_loop.quit()
+
+	def __exit__(self, exc_type, exc_value, traceback) :
+		print("MusichPlayer.__exit__()")
+		self.g_loop.quit()
 
 	def _about_to_finish(self, * pos, ** nam) :
 		GLib.idle_add(self.pop)
@@ -76,7 +90,7 @@ class MusichPlayer() :
 
 	def pop(self) :
 		# pick the next stong and start playing
-		hsh = self.m_que.pop()
+		hsh = self.m_queue.pop()
 
 		if hsh is None :
 			print(f"\x1b[35mMusichLocal.play(\x1b[33mEMPTY QUEUE\x1b[35m)\x1b[0m")
@@ -84,7 +98,7 @@ class MusichPlayer() :
 			self.gst.set_state(Gst.State.NULL)
 			return
 
-		m_pth = self.m_cat.hash_to_path(hsh)
+		m_pth = self.m_catalog.hash_to_path(hsh)
 		print(f"\x1b[35mMusichLocal.play(\x1b[36m{m_pth}\x1b[35m)\x1b[0m")
 		
 		self.play_track = None
@@ -93,8 +107,12 @@ class MusichPlayer() :
 		self.gst.set_state(Gst.State.PLAYING)
 		self.play_track = hsh
 
-	def toggle(self, mode=ToggleMode.AUTO) :
+	@property
+	def play_status(self) :
+		m = self.gst.get_state(1000).state
+		return None if (m == Gst.State.NULL) else m == Gst.State.PLAYING
 
+	def toggle(self, mode=ToggleMode.AUTO) :
 		if mode == ToggleMode.PLAY :
 			m = Gst.State.PLAYING
 		elif mode == ToggleMode.PAUSE :
@@ -110,13 +128,9 @@ class MusichPlayer() :
 
 		self.gst.set_state(m)
 
-		self.play_status = None if (m == Gst.State.NULL) else m == Gst.State.PLAYING
+		# play it optimistic, if the state does validate, it will be updated at the next get_info
+		return None if (m == Gst.State.NULL) else m == Gst.State.PLAYING
 
-		return self.play_status
-
-	def loop(self) :
-		self.m_loop = GLib.MainLoop()
-		self.m_loop.run()
 
 if __name__ == '__main__' :
 

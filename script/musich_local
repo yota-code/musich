@@ -9,6 +9,7 @@ from cc_pathlib import Path
 import musich.local
 import musich.catalog
 import musich.queue
+import musich.player
 
 root_dir = Path(os.environ["MUSICH_root_DIR"]).resolve()
 static_dir = Path(os.environ["MUSICH_static_DIR"]).resolve()
@@ -29,13 +30,19 @@ musich_config = {
 	}
 }
 
-musich_catalog = musich.catalog.MusichCatalog(catalog_dir)
+m_catalog = musich.catalog.MusichCatalog(catalog_dir)
 
-musich_obj = musich.local.MusichLocal(static_dir, musich_catalog)
+with musich.queue.MusichQueue() as m_queue :
+	m_player = musich.player.MusichPlayer(m_queue, m_catalog)
 
-cherrypy.tree.mount(musich_obj, '/musich', config=musich_config)
+	cherrypy.engine.subscribe('stop', m_player.g_stop)
 
-cherrypy.engine.start()
+	m_local = musich.local.MusichLocal(static_dir, m_queue, m_catalog, m_player)
 
-musich_obj.m_ply.loop()
-cherrypy.engine.block()
+	cherrypy.tree.mount(m_local, '/mlocal', config=musich_config)
+
+	cherrypy.engine.start()
+	
+	m_player.g_block()
+	cherrypy.engine.block()
+		

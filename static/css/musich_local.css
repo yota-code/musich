@@ -1,8 +1,5 @@
-
-
 #play_control {
 	width: auto;
-	border:1px red solid;
 	display:flex;
 	flex-direction: row;
 	justify-content: space-around;
@@ -19,8 +16,8 @@
 table {
 	width : 100%;
 	margin: auto;
-	border: 2px solid aliceblue;
 	padding: 0.1em;
+	border-collapse: collapse;
 }
 
 tr :hover {
@@ -57,7 +54,7 @@ button {
 body {
 	margin: auto;
 	width:100%;
-	background-color: lightgray;
+	background-color: white;
 	box-sizing: border-box;
 	font-family: 'Roboto Condensed', sans-serif;
 }
@@ -72,12 +69,14 @@ body {
 }
 
 #tab_content div table {
-	background-color: lightblue;
 	width:100%;
 	margin:auto;
 	box-sizing: border-box;
-
+	border: 2px solid red;
 }
+
+tr:nth-child(even) {background: hsl(215, 100%, 90%)}
+tr:nth-child(odd) {background: hsl(215, 50%, 82%)}
 
 audio {
 	width: 100%;

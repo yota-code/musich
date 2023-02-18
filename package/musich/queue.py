@@ -1,39 +1,83 @@
 #!/usr/bin/env python3
 
+import os
+
+from cc_pathlib import Path
 
 class MusichQueue() :
-	# utilisé pour la playlist locale, pourrait être utilisé aussi pour la playlist à distance (une fois qu'on aura mis un système d'authentification)
+	""" this object manage two lists : 
+	
+	- self.prev_lst or the history, store a list of already played tracks, without duplicates
+	- self.next_lst or the queue, store a list of track to be played
+	
+	"""
+	# utilisé pour la playlist locale uniquement, les mises à jour sont sauvegardées
 
-	max_size = 96
+	max_size = 256
 
-	def __init__(self, save_pth=None) :
-		self.save_pth = save_pth
+	def __init__(self) :
+		self.q_pth = Path(os.environ["MUSICH_catalog_DIR"]).resolve() / ".database" / "queue.json"
 
-		if save_pth is not None and save_pth.is_file() :
-			save_map = save_pth.load()
-			self.next_lst = save_map['next']
-			self.prev_lst = save_map['prev']
+		self.v_next = 0
+		self.v_prev = 0
+
+	def _inc_prev(self) :
+		self.v_prev = (self.v_prev + 1) & 0xFFFF
+
+	def _inc_next(self) :
+		self.v_next = (self.v_next + 1) & 0xFFFF
+
+	def __enter__(self) :
+		if self.q_pth.is_file() :
+			q_map = self.q_pth.load()
+			self.prev_lst = q_map['prev']
+			self.next_lst = q_map['next']
+			self._inc_next()
+			self._inc_prev()
 		else :
 			self.next_lst = list()
 			self.prev_lst = list()
-		
-	def push_to_end(self, key) :
-		self.next_lst.append(key)
+		return self
 
-	def push_to_next(self, key) :
-		self.next_lst = [key,] + self.next_lst
+	def __exit__(self, exc_type, exc_value, traceback) :
+		self.q_pth.save({
+			'prev': self.prev_lst,
+			'next': self.next_lst
+		})
+
+	def push_to_end(self, hsh) :
+		""" add an element as the end of the queue """
+		self.next_lst.append(hsh)
+
+	def push_to_next(self, hsh) :
+		""" add an element at the begining of the queue """
+		self.next_lst = [hsh,] + self.next_lst
+		self._inc_next()
+
+	def pull(self, hsh, index) :
+		""" move an element form the queue """
+		if hsh in self.next_lst :
+			try :
+				if self.next_lst[index] == hsh :
+					self.next_lst = self.next_lst[:index] + self.next_lst[index+1:]
+					self._inc_next()
+			except IndexError :
+				pass
 
 	def pop(self) :
-		# return one element of the queue, or None if the queue is empty
+		# return the first element of the queue, or None if the queue is empty
 		try :
-			k = self.next_lst.pop(0)
+			curr = self.next_lst.pop(0)
 		except IndexError :
 			return None
 
-		self.prev_lst = [m for m in self.prev_lst[-self.max_size+1:] if m != k]
-		self.prev_lst.append(k)
+		self.prev_lst = [m for m in self.prev_lst if m != curr][-self.max_size+1:]
+		self.prev_lst.append(curr)
 
-		return k
+		self._inc_next()
+		self._inc_prev()
+
+		return curr
 
 	def __bool__(self) :
 		return len(self.next_lst) != 0
