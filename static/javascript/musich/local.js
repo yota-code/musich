@@ -110,8 +110,8 @@ class MusichLocal {
 				for ( let hsh of obj[key][1]) {
 					var h_tr = h_table.grow('tr', {
 						'onclick': (key === 'prev') ?
-						`musich.queue_push("${hsh}")` :
-						`musich.queue_pull("${hsh}", ${n})`
+						`musich.push_to_queue("${hsh}")` :
+						`musich.pull_from_queue("${hsh}", ${n})`
 					});
 					var m_meta = this.m_cat.meta_obj[hsh];
 					h_tr.grow('td').add_text(this.m_cat.hsh_to_display(hsh));
@@ -122,15 +122,15 @@ class MusichLocal {
 		}
 	}
 
-	queue_push(hsh) {
-		console.log(`MusichLocal.queue_push(${hsh})`);
+	push_to_queue(hsh) {
+		console.log(`MusichLocal.push_to_queue(${hsh})`);
 		prom_get_JSON(`_push_to_queue?&h=${hsh}`).then((obj) => {
 			this.refresh(obj);
 		});
 	}
 
-	queue_pull(hsh, index) {
-		console.log(`MusichLocal.queue_pull(${hsh}, ${index})`);
+	pull_from_queue(hsh, index) {
+		console.log(`MusichLocal.pull_from_queue(${hsh}, ${index})`);
 		prom_get_JSON(`_pull_from_queue?&h=${hsh}&i=${index}`).then((obj) => {
 			this.refresh(obj);
 		});
@@ -165,9 +165,8 @@ class MusichLocal {
 		h_table.clear();
 
 		for ( let hsh of result_set ) {
-			var h_tr = h_table.grow('tr', {'onclick' : `musich.queue_push("${hsh}")`});
+			var h_tr = h_table.grow('tr', {'onclick' : `musich.push_to_queue("${hsh}")`});
 			var h_td = h_tr.grow('td').add_text(this.m_cat.hsh_to_display(hsh));
-			h_td.onclick = ((evt) => { this.push_to_queue(hsh); });
 		}
 	}
 

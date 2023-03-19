@@ -74,13 +74,16 @@ def _alnum_filter(s) :
 # un fichier json prend bien moins de place qu'une base de données, et en plus on peut l'envoyer directement
 
 class MusichCatalog() :
-	def __init__(self, catalog_dir) :
-		self.c_dir = catalog_dir
+	def __init__(self) :
+		self.c_dir = Path(os.environ["MUSICH_catalog_DIR"]).resolve()
 		self.c_pth = (self.c_dir / ".database" / "file.dbm")
 		self.c_dbm = dbm.gnu.open(str(self.c_pth), 'ru')
 
 	def __getitem__(self, key) :
-		return self.c_dbm[key.encode('utf8')].decode('utf8')
+		return self.c_dir / self.c_dbm[key.encode('utf8')].decode('utf8')
+
+	def __contains__(self, key) :
+		return key in self.c_dbm
 
 class MusichScanner() :
 	"""

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import enum
+import urllib.parse
 
 import gi
 
@@ -98,12 +99,12 @@ class MusichPlayer() :
 			self.gst.set_state(Gst.State.NULL)
 			return
 
-		m_pth = self.m_catalog.hash_to_path(hsh)
+		m_pth = str(self.m_catalog[hsh])
 		print(f"\x1b[35mMusichLocal.play(\x1b[36m{m_pth}\x1b[35m)\x1b[0m")
 		
 		self.play_track = None
 		self.gst.set_state(Gst.State.NULL)
-		self.gst.set_property("uri", f"file://{m_pth}")
+		self.gst.set_property("uri", "file://" + urllib.parse.quote(m_pth))
 		self.gst.set_state(Gst.State.PLAYING)
 		self.play_track = hsh
 

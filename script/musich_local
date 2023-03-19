@@ -30,7 +30,9 @@ musich_config = {
 	}
 }
 
-m_catalog = musich.catalog.MusichCatalog(catalog_dir)
+m_catalog = musich.catalog.MusichCatalog()
+
+(catalog_dir / ".database" / "queue.json").write_text('{"next":["_JjSo55-BpztOhkd0LBREVyffSWw5mBi.489A73", "Bspb2acdj1iRfPVYUj8pztlXR4t0ve3E.40B5D2", "f4ISOb_yFrO1tfuweLuw-qfKLhwO9e5t.667D3A", "YvpoOh1FMMZW9tTCSdcflzO3OrNpW0aF.38137E", "PEk68nT1xiEUGWOzJMsGK4udksX_Xsxy.52DD19", "mXntPMgAlsT93NJnJIC8p5nDJL8lM0Wf.5AEDF3", "CqQgBse_vZZFt2pVWp1l5xJsapOcVK2v.6AFCDC", "xA2T55q80UIBKiOeBGyiQlfAyqwc6m8P.84B18C", "NhCSiBbMLw8HkXWYT7tdpZprnf8n8Ltj.5D4D2B", "1Zlm2A3cbOsxcEZcHxtFRyre8ugQHnOO.6EF8CF", "4-EZs_P1u-9l69kyqNqrbnMmtKkKv7LL.24C247", "h3KVeOymUkNrOP11GO9mzmVhzC0twsbj.4767F4", "YtA3_ze-IzcOQT2vLIpkV_rXoB2iQ1OA.51F8B3", "dA1lbw7lUSPsywZWtQt4BhPjRkXSLSC4.505DAC"],"prev":["CqQgBse_vZZFt2pVWp1l5xJsapOcVK2v.6AFCDC"]}')
 
 with musich.queue.MusichQueue() as m_queue :
 	m_player = musich.player.MusichPlayer(m_queue, m_catalog)
@@ -39,7 +41,7 @@ with musich.queue.MusichQueue() as m_queue :
 
 	m_local = musich.local.MusichLocal(static_dir, m_queue, m_catalog, m_player)
 
-	cherrypy.tree.mount(m_local, '/mlocal', config=musich_config)
+	cherrypy.tree.mount(m_local, '/musich', config=musich_config)
 
 	cherrypy.engine.start()
 	

@@ -28,10 +28,11 @@ class MusichLocal() :
 	@cherrypy.expose
 	@cherrypy.tools.json_out()
 	def _get_info(self, * pos, ** nam) :
-		v_map = {k: int(nam.get(k, -1)) for k in "pn"}
+		v_map = {k: int(nam.get(k, None)) for k in "pn"}
 		return self.info(** v_map)
 
-	def info(self, p=-1, n=-1) :
+	def info(self, p=None, n=None) :
+		""" None if not requested, -1 to force refresh """
 
 		r_map = dict()
 		if p is not None and p != self.m_queue.v_prev :
@@ -46,13 +47,15 @@ class MusichLocal() :
 			self.m_player.play_status # status of the play (None: STOPPED, False: PAUSED, True: PLAYING)
 		]
 
+		print(p, n, r_map)
+
 		return r_map
 
 	@cherrypy.expose
 	@cherrypy.tools.json_out()
 	def _push_to_queue(self, * pos, ** nam) :
 		print(f"MusichLocal._push_to_queue({pos}, {nam})")
-		if 'h' in nam and nam['h'] in self.m_catalog.meta_map :
+		if 'h' in nam and nam['h'] in self.m_catalog :
 			if 'a' in nam :
 				pass # add the whole album
 			else :
@@ -61,7 +64,7 @@ class MusichLocal() :
 				else :
 					self.m_queue.push_to_end(nam['h'])
 
-		return self.info(p=None)
+		return self.info(n=-1)
 	
 	@cherrypy.expose
 	@cherrypy.tools.json_out()
@@ -70,7 +73,7 @@ class MusichLocal() :
 		if 'h' in nam and 'i' in nam :
 			self.m_queue.pull(nam['h'], int(nam['i']))
 		
-		return self.info(p=None)
+		return self.info(n=-1)
 
 	def _about_to_finish(self, * pos, ** nam) :
 		self._play()
@@ -108,7 +111,7 @@ class MusichLocal() :
 	def _set_position(self, * pos, ** nam) :
 		if 't' in nam :
 			self.m_player.set_position(int(nam['t']))
-		return self.info(p=None, n=None)
+		return self.info()
 
 	@cherrypy.expose
 	@cherrypy.tools.json_out()
