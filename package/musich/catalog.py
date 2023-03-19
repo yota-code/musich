@@ -6,6 +6,7 @@ import datetime
 import dbm.gnu
 import hashlib
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -69,18 +70,6 @@ t_col, t_row = os.get_terminal_size(0)
 def _alnum_filter(s) :
 	return ''.join( c for c in str(s).lower() if c.isalnum() )
 
-def _recurse_dir(parent_dir, depth=0) :
-	for pth in parent_dir.iterdir() :
-		if pth.is_file() :
-			yield pth
-		elif pth.is_dir() :
-			print(("--" * (depth)) + '->', pth.name)
-			try :
-				yield from _recurse_dir(pth, depth + 1)
-			except PermissionError :
-				pass
-		else :
-			print(pth)
 
 # un fichier json prend bien moins de place qu'une base de données, et en plus on peut l'envoyer directement
 
@@ -101,7 +90,6 @@ class MusichScanner() :
 		in c_dir, the first level directory must contains not information about the music
 		c_dir / key is always a music file
 
-		hash_map : key -> (path, mtime)
 	"""
 
 	mime = {
@@ -117,64 +105,76 @@ class MusichScanner() :
 		self.c_dir = Path(os.environ["MUSICH_catalog_DIR"]).resolve()
 		self.e_lst = list(self.mime)
 
-		self.meta_pth = (self.c_dir / ".database" / "meta.json")
-		self.file_pth = (self.c_dir / ".database" / "file.json")
+		self.meta_pth = self.c_dir / ".database" / "meta.json"
+		self.scan_pth = self.c_dir / ".database" / "scan.tsv"
+		self.file_pth = self.c_dir / ".database" / "file.dbm"
 
 		self._load()
 
 	def _load(self) :
+		# hsh => { field: metadata, ... }
 		self.meta_map = self.meta_pth.load() if self.meta_pth.is_file() else dict()
-		self.file_map = self.file_pth.load() if self.file_pth.is_file() else dict()
 
-		self.hash_map = { v[0] : (k, v[1]) for k, v in self.file_map.items() }
+		# pth => fsize, mtime
+		self.scan_map = {
+			pth : (int(fsize), int(mtime)) for pth, fsize, mtime in self.scan_pth.load()
+		} if self.scan_pth.is_file() else dict()
 
-	def _prep_album(self) :
-		self.album_map = collections.defaultdict(set)
+		# pth => hsh
+		self.file_map = dict()
+		if self.file_pth.is_file() :
+			with dbm.gnu.open(str(self.file_pth), 'ru') as db :
+				for key in db.keys() :
+					self.file_map[db[key].decode('utf8')] = key.decode('utf8')
 
-		for k in self.meta_map :
-			u = '/'.join(self.meta_map[k]['/'][:-1])
-			self.album_map[u].add((self.meta_map[k].get('tracknumber', 0), self.meta_map[k]['/'][-1], k))
+	# def _prep_album(self) :
+	# 	self.album_map = collections.defaultdict(set)
 
-		for u in self.album_map :
-			self.album_map[u] = [(b, c) for a, b, c in sorted(self.album_map[u])]
+	# 	for k in self.meta_map :
+	# 		u = '/'.join(self.meta_map[k]['/'][:-1])
+	# 		self.album_map[u].add((self.meta_map[k].get('tracknumber', 0), self.meta_map[k]['/'][-1], k))
 
-		del self.album_map[""]
+	# 	for u in self.album_map :
+	# 		self.album_map[u] = [(b, c) for a, b, c in sorted(self.album_map[u])]
+
+	# 	del self.album_map[""]
 
 	def _save(self) :
 		self.meta_pth.save(self.meta_map)
 		self.meta_pth.with_suffix('.json.br').save(self.meta_map)
 
-		self.file_pth.save(self.file_map)
-		self.file_pth.with_suffix('.json.br').save(self.file_map)
+		scan_lst = [
+			[pth, fsize, mtime]
+			for pth, (fsize, mtime) in self.scan_map.items()
+		]
+		self.scan_pth.save(scan_lst)
 
 		dbm_pth = self.file_pth.with_suffix('.dbm')
 		with dbm.gnu.open(str(dbm_pth), 'nf') as db :
-			for key, (fname, mtime) in self.file_map.items() :
-				db[key.encode('utf8')] = fname.encode('utf8')
+			for path, key in self.file_map.items() :
+				db[key.encode('utf8')] = path.encode('utf8')
 			db.reorganize()
 			db.sync()
 
-	def key_to_part(self, key) :
-		return Path(key).with_suffix('').parts[1:]
+	def pth_to_part(self, pth) :
+		return Path(pth).with_suffix('').parts[1:]
 
-	def key_to_path(self, key) :
-		return self.c_dir / key
+	# def key_to_path(self, key) :
+	# 	return self.c_dir / key
 
-	def hash_to_path(self, hsh) :
-		return self.c_dir / self.file_map[hsh][0]
+	# def hash_to_path(self, hsh) :
+	# 	return self.c_dir / self.file_map[hsh][0]
 
-	def key_to_hash(self, key) :
-		bin = self.key_to_path(key).read_bytes()
+	def pth_to_hash(self, pth) :
+		data = (self.c_dir / pth).read_bytes()
 		#TODO: on pourrait passer à 18 bytes (144 bits)
-		hsh = hashlib.blake2b(bin, salt=b"#musich", digest_size=24).digest()
+		hsh = hashlib.blake2b(data, salt=b"#musich", digest_size=24).digest()
 		b64 = base64.urlsafe_b64encode(hsh).decode('ascii')
-		return f'{b64}.{len(bin):X}'
+		return f'{b64}.{len(data):X}'
 
-	def key_to_time(self, key) :
-		return int(self.key_to_path(key).stat().st_mtime)
-
-	def key_to_size(self, key) :
-		return int(self.key_to_path(key).stat().st_size)
+	def pth_to_stat(self, pth) :
+		u = (self.c_dir / pth).stat()
+		return u.st_size, int(math.ceil(u.st_mtime))
 
 	# def hsh_to_search(self, hsh) :
 	# 	s_lst = [' '.join(self.meta_map[hsh]["/"]),]
@@ -189,12 +189,10 @@ class MusichScanner() :
 	# 			s_lst.append(m)
 	# 	return s_lst[0] + '\t' + ' '.join(s_lst[1:])
 
-	def key_to_meta(self, key) :
-		pth = self.key_to_path(key)
-
+	def pth_to_meta(self, pth) :
 		tag_lst = list()
 		try :
-			tag_lst.append( dict(mutagen.File(pth)) )
+			tag_lst.append( dict(mutagen.File(self.c_dir / pth)) )
 			pass_lst = [
 				getattr(self, n)
 				for n in sorted(m for m in dir(self) if m.startswith('pass_'))
@@ -205,73 +203,77 @@ class MusichScanner() :
 			print(tag_lst)
 			raise
 		
-		tag_lst[-1]['/'] = self.key_to_part(key)
+		tag_lst[-1]['/'] = self.pth_to_part(pth)
 
 		return tag_lst[-1]
 
-	def pop(self, key) :
-		print(f"- {key}")
+	def pop(self, pth) :
+		print(f"- {pth}")
 
-		hsh, mtm = self.hash_map[key]
+		key = self.file_map[pth]
+		del self.meta_map[key]
 
-		del self.meta_map[hsh]
-		del self.file_map[hsh]
+		del self.file_map[pth]
 
-		del self.hash_map[key]
+	def push(self, pth) :
+		print(f"+ {pth}")
 
-	def push(self, key) :
-		print(f"+ {key}")
+		hsh = self.pth_to_hash(pth)
+		fsize, mtime = self.pth_to_stat(pth)
 
-		hsh = self.key_to_hash(key)
-		mtm = self.key_to_time(key)
-
-		self.file_map[hsh] = [key, mtm]
-		self.meta_map[hsh] = self.key_to_meta(key)
-
-		self.hash_map[key] = [hsh, mtm]
+		self.file_map[pth] = hsh
+		self.meta_map[hsh] = self.pth_to_meta(pth)
 
 		self.tag_set |= self.meta_map[hsh].keys()
 
-	def scan(self, * suffix_lst, parent_dir=None) :
-		""" scan all folders in the catalog folder, return a set of files """
-		if parent_dir is None :
-			parent_dir = self.c_dir
+	def scan(self, parent_dir, suffix_lst, depth=0) :
+		for pth in parent_dir.iterdir() :
+			if pth.is_file() and pth.suffix.lower() in suffix_lst :
+				p = str(pth.relative_to(self.c_dir))
+				yield p, self.pth_to_stat(p)
+			elif pth.is_dir() :
+				print(("- " * (depth)) + '>', pth.name)
+				try :
+					yield from self.scan(pth, suffix_lst, depth + 1)
+				except PermissionError :
+					pass
+			else :
+				print(pth)
 
-		print(f"MusichCatalog.scan({suffix_lst}, {parent_dir})")
+	# def scan(self, * suffix_lst, parent_dir=None) :
+	# 	""" scan all folders in the catalog folder, return a set of files, with last modification times """
+	# 	if parent_dir is None :
+	# 		parent_dir = self.c_dir
 
-		return set(
-			str(pth.relative_to(self.c_dir))
-			for pth in _recurse_dir(parent_dir)
-			if pth.suffix.lower() in suffix_lst
-		)
+	# 	print(f"MusichCatalog.scan({suffix_lst}, {parent_dir})")
 
-	def refresh(self, * suffix_lst, parent_dir=None) :
-		print(f"MusichCatalog.refresh({suffix_lst}, {parent_dir})")
+	# 	return {
+	# 		str(pth.relative_to(self.c_dir))
+	# 		for pth in _recurse_dir(parent_dir)
+	# 		if pth.suffix.lower() in suffix_lst
+	# 	}
 
+	def refresh(self) :
 		self.tag_set = set()
 
-		if not suffix_lst :
-			suffix_lst = list(self.mime)
+		scan_old = self.scan_map
+		scan_new = {p : s for p, s in self.scan(self.c_dir, list(self.mime))}
 
-		key_set = self.scan(* suffix_lst, parent_dir=parent_dir)
+		to_be_deleted_set = self.file_map.keys() - scan_new.keys()
 
-		to_be_deleted_set = self.hash_map.keys() - key_set
-		for key in to_be_deleted_set :
-			self.pop(key)
+		to_be_added_set = scan_new.keys() - self.file_map.keys()
+		to_be_modified_set = {
+			p for p in scan_new.keys() & scan_old.keys()
+			if scan_old[p] != scan_new[p]
+		}
 
-		for key in sorted(key_set) :
-			pth = self.key_to_path(key)
-			if key in self.hash_map :
-				try :
-					hsh, mtm = self.hash_map[key]
-				except :
-					print(self.hash_map[key])
-					raise
-				if int(pth.stat().st_mtime) <= mtm :
-					print(f"= {key}")
-					continue
-			else :
-				self.push(key)
+		for pth in sorted(to_be_deleted_set) :
+			self.pop(pth)
+
+		for pth in sorted(to_be_added_set | to_be_modified_set) :
+			self.push(pth)
+
+		self.scan_map = scan_new
 
 		self._save()
 
